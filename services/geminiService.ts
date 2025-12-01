@@ -1,16 +1,21 @@
-
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractedSkuResult, NoveyProductDetails, SpellingAnalysis } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to get AI instance safely
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please check your Vercel settings.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 /**
  * Extracts multiple SKUs AND their associated visual prices from a provided image.
  */
 export const extractSkuFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedSkuResult> => {
   try {
+    const ai = getAiClient();
     const cleanBase64 = base64Image.split(',')[1] || base64Image;
 
     const response = await ai.models.generateContent({
@@ -102,6 +107,7 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
  */
 export const checkSpellingInImage = async (base64Image: string, mimeType: string): Promise<SpellingAnalysis> => {
     try {
+      const ai = getAiClient();
       const cleanBase64 = base64Image.split(',')[1] || base64Image;
   
       const response = await ai.models.generateContent({
@@ -174,6 +180,7 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
  */
 export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetails> => {
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Search for the product with SKU "${sku}" specifically on the website "novey.com.pa".
