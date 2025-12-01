@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "ART INSPECTOR | Novey",
+  "version": "1.0.0",
+  "description": "Validador de artes, SKUs y precios para diseñadores de Novey.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Abrir Art Inspector"
+  },
+  "icons": {
+    "128": "vite.svg"
+  },
+  "permissions": []
+}
