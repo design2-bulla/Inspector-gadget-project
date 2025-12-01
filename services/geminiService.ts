@@ -142,7 +142,12 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
               }
             },
             {
-              text: `Act as a strict Spanish proofreader for a retail catalog. Analyze ALL visible text.
+              text: `Act as a strict Spanish proofreader for a retail catalog. 
+              
+              CRITICAL RULES TO AVOID HALLUCINATIONS:
+              1. ONLY analyze text that is CLEARLY VISIBLE and LEGIBLE in the image.
+              2. DO NOT invent words. If a word is not in the image, DO NOT report it.
+              3. If you are not 100% sure a word is spelled wrong due to low resolution, IGNORE IT.
               
               Identify spelling errors, specifically:
               1. Missing accents/tildes (CRITICAL). Even in UPPERCASE words or small legal text. 
@@ -151,14 +156,14 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
               3. Incorrect abbreviations.
 
               Ignore:
-              - Product codes (SKUs), Model numbers, Prices.
-              - Brand names (e.g., "Novey", "Samsung", "DeWalt", "Hisense").
-              - English terms commonly used (e.g., "OFF", "Sale", "Black Friday", "Cyber Week", "Smart TV").
+              - Product codes (SKUs), Model numbers like "50A6NV", Prices.
+              - Brand names (e.g., "Novey", "Samsung", "DeWalt", "Hisense", "Garden Basics").
+              - English terms commonly used (e.g., "OFF", "Sale", "Black Friday", "Cyber Week", "Smart TV", "UHD", "4K").
               - URLs or hashtags.
 
               Return a JSON object with:
               - hasErrors: boolean
-              - corrections: array of objects { original: "wrong word", suggestion: "correct word", context: "short reason" }`
+              - corrections: array of objects { original: "wrong word", suggestion: "correct word", context: "short phrase from the image where the error appears" }`
             }
           ]
         },
@@ -202,12 +207,21 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
 export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetails> => {
   try {
     const ai = getAiClient();
+    
+    // Create variations of the SKU to improve search hit rate
+    const cleanSku = sku.replace(/-/g, ''); // Remove hyphens
+    
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Search for the product with SKU "${sku}" specifically on the website "novey.com.pa".
+      contents: `Perform a thorough search for the product on "novey.com.pa".
       
+      Search Strategy:
+      1. Search for SKU "${sku}".
+      2. If not found, search for SKU "${cleanSku}" (without hyphens).
+      3. Look for the specific product page on novey.com.pa.
+
       Return a JSON object (strictly valid JSON) with:
-      - found: boolean
+      - found: boolean (true ONLY if you found a matching product page on novey.com.pa)
       - title: The full name of the product.
       - price: The CURRENT selling price (e.g. "$12.99").
       - regularPrice: The original price BEFORE discount (if visible).
