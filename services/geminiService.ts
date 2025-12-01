@@ -3,11 +3,32 @@ import { ExtractedSkuResult, NoveyProductDetails, SpellingAnalysis } from "../ty
 
 // Helper to get AI instance safely
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please check your Vercel settings.");
+  // Priority 1: Environment Variable (Vercel)
+  const envKey = process.env.API_KEY;
+  if (envKey && envKey.length > 0 && envKey !== 'undefined') {
+    return new GoogleGenAI({ apiKey: envKey });
   }
-  return new GoogleGenAI({ apiKey });
+
+  // Priority 2: Local Storage (Manual Entry)
+  const localKey = localStorage.getItem('art_inspector_api_key');
+  if (localKey) {
+    return new GoogleGenAI({ apiKey: localKey });
+  }
+
+  throw new Error("API_KEY_MISSING");
+};
+
+export const hasValidApiKey = (): boolean => {
+    try {
+        getAiClient();
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
+
+export const saveManualApiKey = (key: string) => {
+    localStorage.setItem('art_inspector_api_key', key.trim());
 };
 
 /**
@@ -56,7 +77,7 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
                 type: Type.OBJECT,
                 properties: {
                     sku: { type: Type.STRING, description: "The SKU code detected" },
-                    priceOnArt: { type: Type.NUMBER, description: "The numeric price value detected visually next to this SKU", nullable: true }
+                    priceOnArt: { type: Type.NUMBER, description: "The numeric price detected visually", nullable: true }
                 },
                 required: ["sku"]
               }

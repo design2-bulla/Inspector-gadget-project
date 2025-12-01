@@ -1,22 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
-import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage } from './services/geminiService';
+import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
 import { AppState, ProductResultItem, SpellingAnalysis } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [hasKey, setHasKey] = useState<boolean>(true); // Assume true initially
+  const [manualKeyInput, setManualKeyInput] = useState('');
+  
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   
   const [results, setResults] = useState<ProductResultItem[]>([]);
-  // Use a string array just for the loading screen display
   const [detectedSkuStrings, setDetectedSkuStrings] = useState<string[]>([]);
   
   const [spellingResult, setSpellingResult] = useState<SpellingAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if we have an API Key available (either Env or LocalStorage)
+    const valid = hasValidApiKey();
+    setHasKey(valid);
+  }, []);
+
+  const handleSaveKey = () => {
+      if (!manualKeyInput.trim()) {
+          alert("Por favor ingresa una llave válida.");
+          return;
+      }
+      saveManualApiKey(manualKeyInput);
+      setHasKey(true);
+      window.location.reload(); // Reload to pick up the new key
+  };
 
   const handleImageSelected = async (base64: string, mimeType: string) => {
     setSelectedImage(base64);
@@ -60,8 +78,14 @@ const App: React.FC = () => {
         setErrorMsg("No pudimos encontrar códigos SKU válidos en la imagen. Asegúrate de que los rectángulos con el código sean visibles.");
         setAppState(AppState.ERROR);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      if (error.message === 'API_KEY_MISSING') {
+          setHasKey(false);
+          setAppState(AppState.IDLE);
+          setSelectedImage(null);
+          return;
+      }
       setErrorMsg("Ocurrió un error al procesar la imagen con la IA. Inténtalo de nuevo.");
       setAppState(AppState.ERROR);
     }
@@ -76,6 +100,50 @@ const App: React.FC = () => {
     setErrorMsg(null);
   };
 
+  // --- SETUP SCREEN (If no API Key found) ---
+  if (!hasKey) {
+      return (
+          <div className="min-h-screen bg-gradient-to-br from-novey-red to-red-900 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in-up">
+                  <div className="flex justify-center mb-6">
+                      <div className="bg-red-100 p-4 rounded-full">
+                          <Key className="w-8 h-8 text-novey-red" />
+                      </div>
+                  </div>
+                  <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">Bienvenido a Art Inspector</h1>
+                  <p className="text-center text-gray-500 mb-6 text-sm">
+                      Para comenzar, necesitamos conectar la herramienta con los servicios de Google AI.
+                  </p>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                              Google Gemini API Key
+                          </label>
+                          <input 
+                              type="password" 
+                              value={manualKeyInput}
+                              onChange={(e) => setManualKeyInput(e.target.value)}
+                              placeholder="AIzaSy..."
+                              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-novey-red focus:border-transparent outline-none transition-all"
+                          />
+                      </div>
+                      <button 
+                          onClick={handleSaveKey}
+                          className="w-full bg-novey-red text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      >
+                          Conectar y Empezar <ChevronRight className="w-5 h-5" />
+                      </button>
+                  </div>
+                  <p className="mt-6 text-xs text-center text-gray-400">
+                      Esta llave se guardará de forma segura en este navegador.
+                  </p>
+              </div>
+          </div>
+      );
+  }
+
+  // --- MAIN APP ---
   return (
     <div className="bg-gray-50 text-gray-900 font-sans min-h-[600px]">
       <Navbar onSettingsClick={() => setShowSettings(true)} />
@@ -200,7 +268,7 @@ const App: React.FC = () => {
                              <Laptop className="w-6 h-6 text-white" />
                         </div>
                         <h2 className="text-lg font-bold text-gray-900">Art Inspector</h2>
-                        <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-500 mt-1">v1.2.0 Extension</span>
+                        <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-500 mt-1">v2.0 Web</span>
                         
                         <div className="my-4 text-xs text-gray-600 space-y-2">
                             <p>Herramienta interna para el equipo de diseño.</p>
@@ -208,6 +276,17 @@ const App: React.FC = () => {
                                 Powered by Gemini AI
                             </p>
                         </div>
+                        
+                        {/* Option to clear local key if needed */}
+                        <button
+                            className="text-xs text-red-500 underline mb-4"
+                            onClick={() => {
+                                localStorage.removeItem('art_inspector_api_key');
+                                window.location.reload();
+                            }}
+                        >
+                            Desvincular API Key
+                        </button>
 
                         <button 
                             className="w-full bg-gray-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
