@@ -474,7 +474,7 @@ const App: React.FC = () => {
                         <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v3.1 Batch</span>
                         
                         <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
-                            <p>Herramienta interna para el equipo de diseño.</p>
+                            <p>Herramienta interna para el equipo de diseño, desarrollada por el team novey en making bulla.</p>
                             <p className="text-gray-400 dark:text-gray-500 text-xs mt-4">
                                 Powered by Gemini AI
                             </p>
