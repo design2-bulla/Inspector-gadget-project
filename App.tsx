@@ -1,34 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
 import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
-import { AppState, ProductResultItem, SpellingAnalysis } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight } from 'lucide-react';
+import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const [hasKey, setHasKey] = useState<boolean>(true); // Assume true initially
+  const [hasKey, setHasKey] = useState<boolean>(true);
   const [manualKeyInput, setManualKeyInput] = useState('');
   
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  // New Queue System State
+  const [queue, setQueue] = useState<BatchAnalysisItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  const [results, setResults] = useState<ProductResultItem[]>([]);
-  const [detectedSkuStrings, setDetectedSkuStrings] = useState<string[]>([]);
-  
-  const [spellingResult, setSpellingResult] = useState<SpellingAnalysis | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Dark Mode State
+  // Theme State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
+  // Ref to track if we are currently running a loop to avoid double triggers
+  const processingRef = useRef(false);
+
   useEffect(() => {
-    // Check if we have an API Key available (either Env or LocalStorage)
     const valid = hasValidApiKey();
     setHasKey(valid);
 
-    // Initialize Theme
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         setIsDarkMode(true);
@@ -39,6 +35,7 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // -- THEME LOGIC --
   const toggleTheme = () => {
       const newMode = !isDarkMode;
       setIsDarkMode(newMode);
@@ -58,74 +55,154 @@ const App: React.FC = () => {
       }
       saveManualApiKey(manualKeyInput);
       setHasKey(true);
-      window.location.reload(); // Reload to pick up the new key
+      window.location.reload();
   };
 
-  const handleImageSelected = async (base64: string, mimeType: string) => {
-    setSelectedImage(base64);
-    setAppState(AppState.ANALYZING);
-    setErrorMsg(null);
-    setResults([]);
-    setDetectedSkuStrings([]);
-    setSpellingResult(null);
-
-    try {
-      // Step 1: Run Extraction and Spelling Check in Parallel
-      const [extractionResult, spellingAnalysis] = await Promise.all([
-        extractSkuFromImage(base64, mimeType),
-        checkSpellingInImage(base64, mimeType)
-      ]);
-
-      setSpellingResult(spellingAnalysis);
-      
-      const foundProducts = extractionResult.products || [];
-
-      if (foundProducts.length > 0) {
-        setDetectedSkuStrings(foundProducts.map(p => p.sku));
-        
-        // Step 2: Validate with Web
-        setAppState(AppState.VALIDATING);
-        
-        const validationPromises = foundProducts.map(async (product) => {
-            const details = await validateSkuWithWeb(product.sku);
-            return { 
-                sku: product.sku, 
-                priceOnArt: product.priceOnArt, // Pass the visually extracted price
-                details 
-            };
-        });
-
-        const validationResults = await Promise.all(validationPromises);
-        
-        setResults(validationResults);
-        setAppState(AppState.SUCCESS);
-      } else {
-        setErrorMsg("No pudimos encontrar códigos SKU válidos en la imagen. Asegúrate de que los rectángulos con el código sean visibles.");
-        setAppState(AppState.ERROR);
+  // -- QUEUE PROCESSING LOGIC --
+  
+  // Watch queue changes. If there are PENDING items and we aren't processing, start.
+  useEffect(() => {
+      const pendingItems = queue.filter(item => item.status === 'PENDING');
+      if (pendingItems.length > 0 && !processingRef.current) {
+          processNextItem();
       }
-    } catch (error: any) {
-      console.error(error);
-      if (error.message === 'API_KEY_MISSING') {
-          setHasKey(false);
-          setAppState(AppState.IDLE);
-          setSelectedImage(null);
+  }, [queue]);
+
+  const processNextItem = async () => {
+      processingRef.current = true;
+      setIsProcessing(true);
+
+      // Find first pending item
+      const itemIndex = queue.findIndex(i => i.status === 'PENDING');
+      if (itemIndex === -1) {
+          processingRef.current = false;
+          setIsProcessing(false);
           return;
       }
-      setErrorMsg("Ocurrió un error al procesar la imagen con la IA. Inténtalo de nuevo.");
-      setAppState(AppState.ERROR);
-    }
+
+      const item = queue[itemIndex];
+
+      // Update status to ANALYZING
+      updateItemStatus(item.id, 'ANALYZING');
+
+      try {
+          // 1. Extract SKU & Spelling
+          const [extractionResult, spellingAnalysis] = await Promise.all([
+              extractSkuFromImage(item.fileBase64, item.mimeType),
+              checkSpellingInImage(item.fileBase64, item.mimeType)
+          ]);
+
+          // Update spelling result
+          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, spellingResult: spellingAnalysis } : i));
+
+          const foundProducts = extractionResult.products || [];
+
+          if (foundProducts.length > 0) {
+              // Update status to VALIDATING
+              updateItemStatus(item.id, 'VALIDATING');
+
+              // 2. Validate SKUs
+              const validationPromises = foundProducts.map(async (product) => {
+                  const details = await validateSkuWithWeb(product.sku);
+                  return { 
+                      sku: product.sku, 
+                      priceOnArt: product.priceOnArt, 
+                      details 
+                  };
+              });
+
+              const validationResults = await Promise.all(validationPromises);
+              
+              // COMPLETE SUCCESS
+              setQueue(prev => prev.map(i => i.id === item.id ? { 
+                  ...i, 
+                  status: 'COMPLETED',
+                  results: validationResults 
+              } : i));
+
+          } else {
+              // ERROR: No SKUs found
+              setQueue(prev => prev.map(i => i.id === item.id ? { 
+                  ...i, 
+                  status: 'ERROR',
+                  errorMsg: "No se encontraron códigos SKU visibles."
+              } : i));
+          }
+
+      } catch (error: any) {
+          console.error(`Error processing item ${item.id}`, error);
+          const msg = error.message === 'API_KEY_MISSING' ? 'Falta API Key' : "Error al procesar imagen.";
+          setQueue(prev => prev.map(i => i.id === item.id ? { 
+              ...i, 
+              status: 'ERROR',
+              errorMsg: msg
+          } : i));
+      }
+
+      // Small delay to let UI breathe
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Continue to next
+      processingRef.current = false;
+      
+      // Trigger effect again by implicit state change or recursive call? 
+      // Effect dependency on [queue] handles it because we updated state status to COMPLETED/ERROR, 
+      // so the next render finds the NEXT pending item.
   };
 
-  const resetApp = () => {
-    setAppState(AppState.IDLE);
-    setSelectedImage(null);
-    setResults([]);
-    setDetectedSkuStrings([]);
-    setSpellingResult(null);
-    setErrorMsg(null);
+  const updateItemStatus = (id: string, status: BatchItemStatus) => {
+      setQueue(prev => prev.map(item => item.id === id ? { ...item, status } : item));
   };
 
-  // --- SETUP SCREEN (If no API Key found) ---
+  // -- HANDLERS --
+
+  const handleImagesSelected = (files: { base64: string, mimeType: string, name: string }[]) => {
+      const newItems: BatchAnalysisItem[] = files.map(file => ({
+          id: Date.now() + Math.random().toString(36).substr(2, 9),
+          fileBase64: file.base64,
+          mimeType: file.mimeType,
+          fileName: file.name,
+          status: 'PENDING',
+          results: [],
+          spellingResult: null
+      }));
+
+      setQueue(prev => [...prev, ...newItems]);
+  };
+
+  const clearQueue = () => {
+      setQueue([]);
+      setIsProcessing(false);
+      processingRef.current = false;
+  };
+
+  const removeQueueItem = (id: string) => {
+      setQueue(prev => prev.filter(i => i.id !== id));
+  };
+
+  // --- RENDER HELPERS ---
+
+  const renderStatusIcon = (status: BatchItemStatus) => {
+      switch(status) {
+          case 'PENDING': return <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600"></div>;
+          case 'ANALYZING': return <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />;
+          case 'VALIDATING': return <Globe className="w-6 h-6 text-purple-500 animate-pulse" />;
+          case 'COMPLETED': return <CheckCircle className="w-6 h-6 text-green-500" />;
+          case 'ERROR': return <AlertCircle className="w-6 h-6 text-red-500" />;
+      }
+  };
+
+  const renderStatusText = (status: BatchItemStatus, errorMsg?: string) => {
+      switch(status) {
+          case 'PENDING': return "En espera...";
+          case 'ANALYZING': return "Analizando imagen...";
+          case 'VALIDATING': return "Validando con Novey.com.pa...";
+          case 'COMPLETED': return "Análisis completado";
+          case 'ERROR': return errorMsg || "Error";
+      }
+  };
+
+  // --- SETUP SCREEN ---
   if (!hasKey) {
       return (
           <div className="min-h-screen bg-gradient-to-br from-novey-red to-red-900 flex items-center justify-center p-4">
@@ -168,126 +245,167 @@ const App: React.FC = () => {
       );
   }
 
-  // --- MAIN APP ---
+  // --- MAIN RENDER ---
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans min-h-[600px] transition-colors duration-300">
+    <div className="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans min-h-screen transition-colors duration-300 pb-20">
       <Navbar 
         onSettingsClick={() => setShowSettings(true)} 
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
       />
 
-      <main className="p-4 md:p-8">
+      <main className="p-4 md:p-8 max-w-7xl mx-auto">
         
-        {/* IDLE STATE */}
-        {appState === AppState.IDLE && (
-          <div className="animate-fade-in-up max-w-4xl mx-auto">
+        {/* TOP SECTION: Dropzone always visible if queue is empty OR if we want to add more? 
+            Let's keep it simple: Show dropzone if queue is empty. If queue exists, show Summary + List + Add Button.
+        */}
+
+        {queue.length === 0 ? (
+          <div className="animate-fade-in-up max-w-4xl mx-auto mt-8">
             <div className="text-center mb-10">
-              <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 font-medium">
-                Sube tu diseño para validar SKUs, precios y ortografía.
+              <h2 className="text-3xl font-bold mb-3 text-gray-800 dark:text-white">Art Inspector</h2>
+              <p className="text-lg text-gray-600 dark:text-gray-300 font-medium">
+                Sube tus diseños (por lote) para validar SKUs, precios y ortografía.
               </p>
             </div>
             
             <div className="bg-white dark:bg-gray-800 p-2 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
-                <Dropzone onImageSelected={handleImageSelected} />
+                <Dropzone onImagesSelected={handleImagesSelected} />
             </div>
 
-            <div className="mt-10 grid grid-cols-3 gap-6 text-center">
+            <div className="mt-12 grid grid-cols-3 gap-6 text-center">
                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full w-fit mx-auto mb-4">
                         <ImageIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">1. Arte</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Sube tu imagen JPG o PNG</p>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">1. Carga Múltiple</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Arrastra hasta 10 imágenes a la vez</p>
                 </div>
                  <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-full w-fit mx-auto mb-4">
                         <ScanLine className="w-8 h-8 text-purple-600 dark:text-purple-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">2. Escaneo</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">IA detecta SKU y Precios</p>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">2. Análisis en Cola</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Procesamos uno a uno automáticamente</p>
                 </div>
                  <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-full w-fit mx-auto mb-4">
                         <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">3. Validación</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Compara con novey.com.pa</p>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">3. Reporte Completo</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">SKU, Precios y Ortografía por imagen</p>
                 </div>
             </div>
           </div>
-        )}
-
-        {/* ANALYZING STATE */}
-        {appState === AppState.ANALYZING && (
-          <div className="mt-12 text-center">
-             <div className="relative w-full max-w-xs mx-auto aspect-video bg-gray-200 dark:bg-gray-700 rounded-xl overflow-hidden mb-8 shadow-inner border border-gray-300 dark:border-gray-600">
-                {selectedImage && (
-                    <img src={selectedImage} className="w-full h-full object-contain opacity-50 blur-sm" alt="Analizando" />
-                )}
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="absolute inset-0 bg-gradient-to-t from-white/90 dark:from-gray-900/90 to-transparent"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                        <Loader2 className="w-12 h-12 text-novey-red animate-spin mb-4" />
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">Analizando...</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-300">Buscando SKUs y errores...</p>
+        ) : (
+            // QUEUE LIST VIEW
+            <div className="animate-fade-in">
+                {/* Header Actions */}
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cola de Análisis</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Procesando {queue.filter(i => i.status === 'COMPLETED').length} de {queue.length} imágenes
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={clearQueue}
+                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                            Reiniciar Todo
+                        </button>
+                        {/* Hidden input trick to add more files? Or just rely on restart? 
+                            Let's keep it simple: Restart to add new batch. 
+                        */}
                     </div>
                 </div>
-                <div className="absolute top-0 left-0 w-full h-1 bg-novey-red shadow-[0_0_15px_rgba(227,28,35,0.8)] animate-[scan_2s_linear_infinite]"></div>
-             </div>
-          </div>
-        )}
 
-        {/* VALIDATING STATE */}
-        {appState === AppState.VALIDATING && (
-           <div className="mt-12 text-center">
-             <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md mx-auto">
-                <Globe className="w-16 h-16 text-blue-500 mx-auto mb-6 animate-pulse" />
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                    {detectedSkuStrings.length > 1 
-                        ? `Detectados ${detectedSkuStrings.length} SKUs`
-                        : `SKU: ${detectedSkuStrings[0]}`
-                    }
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-8">
-                    Consultando base de datos de novey.com.pa...
-                </p>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-3 overflow-hidden">
-                  <div className="bg-blue-600 h-3 rounded-full w-2/3 animate-[loading_1.5s_ease-in-out_infinite]"></div>
+                {/* The List */}
+                <div className="space-y-8">
+                    {queue.map((item, index) => (
+                        <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            {/* Card Header (File Info & Status) */}
+                            <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <span className="font-mono text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded border dark:border-gray-700">
+                                        #{index + 1}
+                                    </span>
+                                    <h3 className="font-semibold text-gray-700 dark:text-gray-200 truncate max-w-[200px] md:max-w-md">
+                                        {item.fileName}
+                                    </h3>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:block">
+                                        {renderStatusText(item.status, item.errorMsg)}
+                                    </span>
+                                    {renderStatusIcon(item.status)}
+                                    {item.status !== 'ANALYZING' && item.status !== 'VALIDATING' && (
+                                        <button 
+                                            onClick={() => removeQueueItem(item.id)}
+                                            className="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                            title="Eliminar de la lista"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Card Body (Content) */}
+                            <div className="p-0">
+                                {item.status === 'COMPLETED' ? (
+                                    <div className="p-6">
+                                        <SkuResult 
+                                            results={item.results}
+                                            spellingResult={item.spellingResult}
+                                            imageSrc={item.fileBase64}
+                                            onReset={() => {}} // No reset inside list item
+                                            isBatchMode={true} // Cleaner UI
+                                        />
+                                    </div>
+                                ) : item.status === 'ERROR' ? (
+                                    <div className="p-8 text-center bg-red-50/50 dark:bg-red-900/10">
+                                        <div className="flex justify-center mb-4">
+                                            <img src={item.fileBase64} className="h-32 object-contain rounded opacity-50 grayscale" alt="Thumb" />
+                                        </div>
+                                        <p className="text-red-600 dark:text-red-400 font-medium">
+                                            {item.errorMsg || "Error desconocido"}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    // Loading / Pending State
+                                    <div className="p-12 flex flex-col items-center justify-center min-h-[300px]">
+                                        {item.status !== 'PENDING' && (
+                                            <div className="w-full max-w-md mb-8">
+                                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                                    <div className="bg-blue-500 h-2 rounded-full w-1/3 animate-[loading_1s_ease-in-out_infinite]"></div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="relative mb-4">
+                                            <img 
+                                                src={item.fileBase64} 
+                                                className={`h-48 object-contain rounded shadow-lg transition-all duration-500 ${item.status === 'PENDING' ? 'opacity-50 grayscale scale-95' : 'opacity-100 scale-100'}`} 
+                                                alt="Preview" 
+                                            />
+                                            {item.status !== 'PENDING' && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-white/30 dark:bg-black/30 backdrop-blur-[2px] rounded">
+                                                    <Loader2 className="w-10 h-10 text-novey-red animate-spin" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-gray-500 dark:text-gray-400 animate-pulse">
+                                            {renderStatusText(item.status)}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
-             </div>
-           </div>
-        )}
-
-        {/* SUCCESS STATE */}
-        {appState === AppState.SUCCESS && selectedImage && (
-          <SkuResult 
-            results={results}
-            spellingResult={spellingResult}
-            imageSrc={selectedImage} 
-            onReset={resetApp} 
-          />
-        )}
-
-        {/* ERROR STATE */}
-        {appState === AppState.ERROR && (
-           <div className="mt-10 text-center">
-             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 p-8 rounded-2xl max-w-lg mx-auto">
-                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertCircle className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Algo salió mal</h3>
-                <p className="text-base text-gray-600 dark:text-gray-300 mb-8">
-                    {errorMsg}
-                </p>
-                <button 
-                    onClick={resetApp}
-                    className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-                >
-                    Intentar otra imagen
-                </button>
-             </div>
-           </div>
+            </div>
         )}
 
         {/* Settings Modal */}
@@ -306,7 +424,7 @@ const App: React.FC = () => {
                              <Laptop className="w-8 h-8 text-white" />
                         </div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Art Inspector</h2>
-                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v2.1 Web</span>
+                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v3.0 Batch</span>
                         
                         <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
                             <p>Herramienta interna para el equipo de diseño.</p>
@@ -315,7 +433,6 @@ const App: React.FC = () => {
                             </p>
                         </div>
                         
-                        {/* Option to clear local key if needed */}
                         <button
                             className="text-xs text-red-500 hover:text-red-600 underline mb-6"
                             onClick={() => {
@@ -338,19 +455,6 @@ const App: React.FC = () => {
         )}
 
       </main>
-
-      <style>{`
-        @keyframes scan {
-            0% { top: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
-        }
-        @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(200%); }
-        }
-      `}</style>
     </div>
   );
 };

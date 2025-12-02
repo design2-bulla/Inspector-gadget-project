@@ -7,6 +7,7 @@ interface SkuResultProps {
   spellingResult: SpellingAnalysis | null;
   imageSrc: string;
   onReset: () => void;
+  isBatchMode?: boolean; // New prop to control header visibility
 }
 
 const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
@@ -287,7 +288,7 @@ const PriceIntegrityAlert: React.FC<{ results: ProductResultItem[] }> = ({ resul
     );
 };
 
-const SkuResult: React.FC<SkuResultProps> = ({ results, spellingResult, imageSrc, onReset }) => {
+const SkuResult: React.FC<SkuResultProps> = ({ results, spellingResult, imageSrc, onReset, isBatchMode = false }) => {
   const totalSkus = results.length;
   const foundSkus = results.filter(r => r.details.found).length;
   
@@ -295,39 +296,41 @@ const SkuResult: React.FC<SkuResultProps> = ({ results, spellingResult, imageSrc
   const singleItem = results[0];
 
   return (
-    <div className="flex flex-col h-full animate-fade-in pb-12">
+    <div className={`flex flex-col h-full animate-fade-in ${isBatchMode ? '' : 'pb-12'}`}>
       
-      {/* Universal Header */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-full ${foundSkus === totalSkus ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'}`}>
-              {foundSkus === totalSkus ? (
-                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-              ) : (
-                <AlertTriangle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-              )}
+      {/* Universal Header - Hide if Batch Mode */}
+      {!isBatchMode && (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-full ${foundSkus === totalSkus ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'}`}>
+                {foundSkus === totalSkus ? (
+                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                ) : (
+                    <AlertTriangle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                )}
+                </div>
+                <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">
+                    {foundSkus}/{totalSkus} Productos Validados
+                </p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                    {isSingleMode ? `SKU: ${singleItem.sku}` : 'Resumen de Análisis'}
+                </h2>
+                </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">
-                {foundSkus}/{totalSkus} Productos Validados
-              </p>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                {isSingleMode ? `SKU: ${singleItem.sku}` : 'Resumen de Análisis'}
-              </h2>
+            
+            <div className="flex gap-3">
+                <button 
+                    onClick={onReset}
+                    className="px-6 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors shadow-sm"
+                >
+                    Escanear Nuevo Arte
+                </button>
             </div>
-          </div>
-          
-          <div className="flex gap-3">
-             <button 
-                onClick={onReset}
-                className="px-6 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors shadow-sm"
-             >
-                Escanear Nuevo Arte
-             </button>
-          </div>
+            </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Spelling Alerts Section */}
@@ -346,7 +349,7 @@ const SkuResult: React.FC<SkuResultProps> = ({ results, spellingResult, imageSrc
                 <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
                     <h3 className="font-semibold text-gray-700 dark:text-gray-200">Tu Arte Original</h3>
                     <span className="text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-1 rounded border dark:border-gray-700">
-                        {totalSkus} Códigos detectados
+                        {totalSkus} Códigos
                     </span>
                 </div>
                 <div className="bg-gray-100 dark:bg-gray-900 relative flex items-center justify-center p-4 overflow-hidden min-h-[300px]">

@@ -17,6 +17,7 @@ export interface NoveyProductDetails {
   imageUrl?: string; 
   url?: string;
   description?: string;
+  skuSuggestion?: string; // Suggestion if SKU format is wrong (e.g. missing hyphen)
 }
 
 export interface ProductResultItem {
@@ -38,10 +39,22 @@ export interface SpellingAnalysis {
 
 export enum AppState {
   IDLE = 'IDLE',
-  ANALYZING = 'ANALYZING',
-  VALIDATING = 'VALIDATING',
-  SUCCESS = 'SUCCESS',
+  PROCESSING = 'PROCESSING', // New state for batch processing
   ERROR = 'ERROR'
+}
+
+// New Interface for Batch Items
+export type BatchItemStatus = 'PENDING' | 'ANALYZING' | 'VALIDATING' | 'COMPLETED' | 'ERROR';
+
+export interface BatchAnalysisItem {
+  id: string;
+  fileBase64: string;
+  mimeType: string;
+  fileName: string;
+  status: BatchItemStatus;
+  results: ProductResultItem[];
+  spellingResult: SpellingAnalysis | null;
+  errorMsg?: string;
 }
 
 export interface ValidationHistoryItem {
