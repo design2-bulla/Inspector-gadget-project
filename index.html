@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -50,6 +51,17 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
       }
+      
+      /* Dark mode scrollbar */
+      .dark body {
+        background-color: #111827;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #4b5563;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+      }
     </style>
   <script type="importmap">
 {
@@ -69,5 +81,13 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      // Global error handler for safety
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error("Global Error:", message);
+        // We avoid showing alerts to not scare the user, but we log it.
+        // If the screen is white, this might help in console.
+      };
+    </script>
   </body>
 </html>

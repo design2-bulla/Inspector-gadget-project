@@ -56,11 +56,11 @@ const Dropzone: React.FC<DropzoneProps> = ({ onImageSelected, disabled }) => {
       onDrop={handleDrop}
       className={`
         relative group cursor-pointer transition-all duration-300 ease-in-out
-        border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-center
-        h-48 w-full bg-white
+        border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center
+        h-64 w-full
         ${isDragging 
-          ? 'border-novey-red bg-red-50 scale-[1.01]' 
-          : 'border-gray-300 hover:border-novey-red hover:bg-gray-50'
+          ? 'border-novey-red bg-red-50 dark:bg-red-900/10 scale-[1.01]' 
+          : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-novey-red dark:hover:border-novey-red hover:bg-gray-50 dark:hover:bg-gray-800/80'
         }
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
@@ -73,15 +73,15 @@ const Dropzone: React.FC<DropzoneProps> = ({ onImageSelected, disabled }) => {
         disabled={disabled}
       />
       
-      <div className="bg-novey-red/10 p-3 rounded-full mb-3 group-hover:bg-novey-red/20 transition-colors">
-        <Upload className="w-6 h-6 text-novey-red" />
+      <div className="bg-novey-red/10 dark:bg-novey-red/20 p-5 rounded-full mb-4 group-hover:bg-novey-red/20 dark:group-hover:bg-novey-red/30 transition-colors">
+        <Upload className="w-10 h-10 text-novey-red" />
       </div>
       
-      <h3 className="text-base font-semibold text-gray-800 mb-0.5">
-        Sube o arrastra
+      <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
+        Sube o arrastra tu arte
       </h3>
-      <p className="text-xs text-gray-500 max-w-xs px-4">
-        JPG/PNG. Detectamos SKU y Precios.
+      <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm px-4">
+        Soporta JPG y PNG. Detectamos SKU, Precios y Ortografía automáticamente.
       </p>
     </div>
   );

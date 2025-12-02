@@ -20,11 +20,36 @@ const App: React.FC = () => {
   const [spellingResult, setSpellingResult] = useState<SpellingAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Dark Mode State
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+
   useEffect(() => {
     // Check if we have an API Key available (either Env or LocalStorage)
     const valid = hasValidApiKey();
     setHasKey(valid);
+
+    // Initialize Theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        setIsDarkMode(true);
+        document.documentElement.classList.add('dark');
+    } else {
+        setIsDarkMode(false);
+        document.documentElement.classList.remove('dark');
+    }
   }, []);
+
+  const toggleTheme = () => {
+      const newMode = !isDarkMode;
+      setIsDarkMode(newMode);
+      if (newMode) {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+      } else {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('theme', 'light');
+      }
+  };
 
   const handleSaveKey = () => {
       if (!manualKeyInput.trim()) {
@@ -145,36 +170,49 @@ const App: React.FC = () => {
 
   // --- MAIN APP ---
   return (
-    <div className="bg-gray-50 text-gray-900 font-sans min-h-[600px]">
-      <Navbar onSettingsClick={() => setShowSettings(true)} />
+    <div className="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans min-h-[600px] transition-colors duration-300">
+      <Navbar 
+        onSettingsClick={() => setShowSettings(true)} 
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleTheme}
+      />
 
-      <main className="p-4">
+      <main className="p-4 md:p-8">
         
         {/* IDLE STATE */}
         {appState === AppState.IDLE && (
-          <div className="animate-fade-in-up">
-            <div className="text-center mb-6">
-              <p className="text-sm text-gray-600">
+          <div className="animate-fade-in-up max-w-4xl mx-auto">
+            <div className="text-center mb-10">
+              <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 font-medium">
                 Sube tu diseño para validar SKUs, precios y ortografía.
               </p>
             </div>
             
-            <div className="bg-white p-2 rounded-xl shadow-md border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-2 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
                 <Dropzone onImageSelected={handleImageSelected} />
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-                <div className="p-2 bg-white rounded-lg border border-gray-100 shadow-sm">
-                    <ImageIcon className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-                    <h3 className="text-xs font-semibold">1. Arte</h3>
+            <div className="mt-10 grid grid-cols-3 gap-6 text-center">
+                <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full w-fit mx-auto mb-4">
+                        <ImageIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">1. Arte</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Sube tu imagen JPG o PNG</p>
                 </div>
-                 <div className="p-2 bg-white rounded-lg border border-gray-100 shadow-sm">
-                    <ScanLine className="w-5 h-5 text-purple-600 mx-auto mb-1" />
-                    <h3 className="text-xs font-semibold">2. Escaneo</h3>
+                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-full w-fit mx-auto mb-4">
+                        <ScanLine className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">2. Escaneo</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">IA detecta SKU y Precios</p>
                 </div>
-                 <div className="p-2 bg-white rounded-lg border border-gray-100 shadow-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                    <h3 className="text-xs font-semibold">3. Validación</h3>
+                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
+                    <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-full w-fit mx-auto mb-4">
+                        <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">3. Validación</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Compara con novey.com.pa</p>
                 </div>
             </div>
           </div>
@@ -183,16 +221,16 @@ const App: React.FC = () => {
         {/* ANALYZING STATE */}
         {appState === AppState.ANALYZING && (
           <div className="mt-12 text-center">
-             <div className="relative w-full max-w-xs mx-auto aspect-video bg-gray-200 rounded-lg overflow-hidden mb-8 shadow-inner border border-gray-300">
+             <div className="relative w-full max-w-xs mx-auto aspect-video bg-gray-200 dark:bg-gray-700 rounded-xl overflow-hidden mb-8 shadow-inner border border-gray-300 dark:border-gray-600">
                 {selectedImage && (
                     <img src={selectedImage} className="w-full h-full object-contain opacity-50 blur-sm" alt="Analizando" />
                 )}
                 <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="absolute inset-0 bg-gradient-to-t from-white/90 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-white/90 dark:from-gray-900/90 to-transparent"></div>
                     <div className="relative z-10 flex flex-col items-center">
-                        <Loader2 className="w-10 h-10 text-novey-red animate-spin mb-3" />
-                        <h3 className="text-lg font-bold text-gray-800">Analizando...</h3>
-                        <p className="text-xs text-gray-500">Buscando SKUs y errores...</p>
+                        <Loader2 className="w-12 h-12 text-novey-red animate-spin mb-4" />
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">Analizando...</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-300">Buscando SKUs y errores...</p>
                     </div>
                 </div>
                 <div className="absolute top-0 left-0 w-full h-1 bg-novey-red shadow-[0_0_15px_rgba(227,28,35,0.8)] animate-[scan_2s_linear_infinite]"></div>
@@ -203,19 +241,19 @@ const App: React.FC = () => {
         {/* VALIDATING STATE */}
         {appState === AppState.VALIDATING && (
            <div className="mt-12 text-center">
-             <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-sm mx-auto">
-                <Globe className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-pulse" />
-                <h3 className="text-lg font-bold text-gray-900 mb-1">
+             <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md mx-auto">
+                <Globe className="w-16 h-16 text-blue-500 mx-auto mb-6 animate-pulse" />
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                     {detectedSkuStrings.length > 1 
                         ? `Detectados ${detectedSkuStrings.length} SKUs`
                         : `SKU: ${detectedSkuStrings[0]}`
                     }
                 </h3>
-                <p className="text-xs text-gray-600 mb-6">
-                    Consultando novey.com.pa...
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-8">
+                    Consultando base de datos de novey.com.pa...
                 </p>
-                <div className="w-full bg-gray-200 rounded-full h-2 mb-3 overflow-hidden">
-                  <div className="bg-blue-600 h-2 rounded-full w-2/3 animate-[loading_1.5s_ease-in-out_infinite]"></div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-3 overflow-hidden">
+                  <div className="bg-blue-600 h-3 rounded-full w-2/3 animate-[loading_1.5s_ease-in-out_infinite]"></div>
                 </div>
              </div>
            </div>
@@ -234,17 +272,17 @@ const App: React.FC = () => {
         {/* ERROR STATE */}
         {appState === AppState.ERROR && (
            <div className="mt-10 text-center">
-             <div className="bg-red-50 border border-red-100 p-6 rounded-xl">
-                <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <AlertCircle className="w-6 h-6" />
+             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 p-8 rounded-2xl max-w-lg mx-auto">
+                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="w-8 h-8" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-1">Algo salió mal</h3>
-                <p className="text-sm text-gray-600 mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Algo salió mal</h3>
+                <p className="text-base text-gray-600 dark:text-gray-300 mb-8">
                     {errorMsg}
                 </p>
                 <button 
                     onClick={resetApp}
-                    className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+                    className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
                 >
                     Intentar otra imagen
                 </button>
@@ -254,32 +292,32 @@ const App: React.FC = () => {
 
         {/* Settings Modal */}
         {showSettings && (
-            <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-white rounded-xl w-full max-w-xs shadow-2xl p-5 relative">
+            <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
                     <button 
                         onClick={() => setShowSettings(false)}
-                        className="absolute top-3 right-3 p-1 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"
+                        className="absolute top-4 right-4 p-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >
-                        <X className="w-4 h-4" />
+                        <X className="w-5 h-5" />
                     </button>
                     
                     <div className="flex flex-col items-center text-center">
-                        <div className="bg-novey-red p-2 rounded-lg mb-3">
-                             <Laptop className="w-6 h-6 text-white" />
+                        <div className="bg-novey-red p-3 rounded-xl mb-4 shadow-lg shadow-novey-red/20">
+                             <Laptop className="w-8 h-8 text-white" />
                         </div>
-                        <h2 className="text-lg font-bold text-gray-900">Art Inspector</h2>
-                        <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-500 mt-1">v2.0 Web</span>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Art Inspector</h2>
+                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v2.1 Web</span>
                         
-                        <div className="my-4 text-xs text-gray-600 space-y-2">
+                        <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
                             <p>Herramienta interna para el equipo de diseño.</p>
-                            <p className="text-gray-400">
+                            <p className="text-gray-400 dark:text-gray-500 text-xs mt-4">
                                 Powered by Gemini AI
                             </p>
                         </div>
                         
                         {/* Option to clear local key if needed */}
                         <button
-                            className="text-xs text-red-500 underline mb-4"
+                            className="text-xs text-red-500 hover:text-red-600 underline mb-6"
                             onClick={() => {
                                 localStorage.removeItem('art_inspector_api_key');
                                 window.location.reload();
@@ -289,7 +327,7 @@ const App: React.FC = () => {
                         </button>
 
                         <button 
-                            className="w-full bg-gray-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+                            className="w-full bg-gray-900 dark:bg-gray-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
                             onClick={() => setShowSettings(false)}
                         >
                             Cerrar
