@@ -4,7 +4,7 @@ import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
 import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play } from 'lucide-react';
 
 const App: React.FC = () => {
   const [hasKey, setHasKey] = useState<boolean>(true);
@@ -63,24 +63,50 @@ const App: React.FC = () => {
   // Watch queue changes. If there are PENDING items and we aren't processing, start.
   useEffect(() => {
       const pendingItems = queue.filter(item => item.status === 'PENDING');
-      if (pendingItems.length > 0 && !processingRef.current) {
+      if (pendingItems.length > 0 && !isProcessing) {
           processNextItem();
       }
-  }, [queue]);
+  }, [queue, isProcessing]);
+
+  // Manual trigger to unstick the queue
+  const forceProcessQueue = () => {
+      // Reset locks
+      processingRef.current = false;
+      setIsProcessing(false);
+      // The useEffect will pick it up, or we can force call:
+      setTimeout(() => processNextItem(), 100);
+  };
+
+  const processSpecificItem = (id: string) => {
+      // Move this item to the top priority essentially by processing it now
+      // We need to verify we aren't already processing something else to avoid clashes, 
+      // or we just force it.
+      if (isProcessing) return; // Wait for current to finish
+      
+      const itemIndex = queue.findIndex(i => i.id === id);
+      if (itemIndex !== -1) {
+          processItemAtIndex(itemIndex);
+      }
+  };
 
   const processNextItem = async () => {
-      processingRef.current = true;
-      setIsProcessing(true);
+      // Safety check
+      if (processingRef.current) return;
 
       // Find first pending item
       const itemIndex = queue.findIndex(i => i.status === 'PENDING');
       if (itemIndex === -1) {
-          processingRef.current = false;
-          setIsProcessing(false);
           return;
       }
+      
+      await processItemAtIndex(itemIndex);
+  };
 
-      const item = queue[itemIndex];
+  const processItemAtIndex = async (index: number) => {
+      processingRef.current = true;
+      setIsProcessing(true);
+
+      const item = queue[index];
 
       // Update status to ANALYZING
       updateItemStatus(item.id, 'ANALYZING');
@@ -137,17 +163,11 @@ const App: React.FC = () => {
               status: 'ERROR',
               errorMsg: msg
           } : i));
+      } finally {
+        // ALWAYS RELEASE LOCK
+        processingRef.current = false;
+        setIsProcessing(false);
       }
-
-      // Small delay to let UI breathe
-      await new Promise(r => setTimeout(r, 500));
-      
-      // Continue to next
-      processingRef.current = false;
-      
-      // Trigger effect again by implicit state change or recursive call? 
-      // Effect dependency on [queue] handles it because we updated state status to COMPLETED/ERROR, 
-      // so the next render finds the NEXT pending item.
   };
 
   const updateItemStatus = (id: string, status: BatchItemStatus) => {
@@ -256,9 +276,7 @@ const App: React.FC = () => {
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
         
-        {/* TOP SECTION: Dropzone always visible if queue is empty OR if we want to add more? 
-            Let's keep it simple: Show dropzone if queue is empty. If queue exists, show Summary + List + Add Button.
-        */}
+        {/* TOP SECTION: Dropzone always visible if queue is empty */}
 
         {queue.length === 0 ? (
           <div className="animate-fade-in-up max-w-4xl mx-auto mt-8">
@@ -301,14 +319,34 @@ const App: React.FC = () => {
             // QUEUE LIST VIEW
             <div className="animate-fade-in">
                 {/* Header Actions */}
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cola de Análisis</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Procesando {queue.filter(i => i.status === 'COMPLETED').length} de {queue.length} imágenes
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                            {isProcessing && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {isProcessing 
+                                    ? `Procesando... (${queue.filter(i => i.status === 'COMPLETED').length}/${queue.length})` 
+                                    : queue.some(i => i.status === 'PENDING') 
+                                        ? "Pausado / En espera"
+                                        : "Todos los análisis completados"
+                                }
+                            </p>
+                        </div>
                     </div>
                     <div className="flex gap-3">
+                        {/* Force Continue Button */}
+                        {queue.some(i => i.status === 'PENDING') && (
+                            <button 
+                                onClick={forceProcessQueue}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+                                title="Forzar que continúe el siguiente análisis"
+                            >
+                                <Play className="w-4 h-4 fill-current" />
+                                Continuar Cola
+                            </button>
+                        )}
+                        
                         <button 
                             onClick={clearQueue}
                             className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -316,9 +354,6 @@ const App: React.FC = () => {
                             <RefreshCw className="w-4 h-4" />
                             Reiniciar Todo
                         </button>
-                        {/* Hidden input trick to add more files? Or just rely on restart? 
-                            Let's keep it simple: Restart to add new batch. 
-                        */}
                     </div>
                 </div>
 
@@ -337,10 +372,22 @@ const App: React.FC = () => {
                                     </h3>
                                 </div>
                                 <div className="flex items-center gap-3">
+                                    {/* Manual Start Button for individual item */}
+                                    {item.status === 'PENDING' && !isProcessing && (
+                                        <button
+                                            onClick={() => processSpecificItem(item.id)}
+                                            className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors mr-2"
+                                        >
+                                            <Play className="w-3 h-3 fill-current" />
+                                            Analizar Ahora
+                                        </button>
+                                    )}
+
                                     <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:block">
                                         {renderStatusText(item.status, item.errorMsg)}
                                     </span>
                                     {renderStatusIcon(item.status)}
+                                    
                                     {item.status !== 'ANALYZING' && item.status !== 'VALIDATING' && (
                                         <button 
                                             onClick={() => removeQueueItem(item.id)}
@@ -424,7 +471,7 @@ const App: React.FC = () => {
                              <Laptop className="w-8 h-8 text-white" />
                         </div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Art Inspector</h2>
-                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v3.0 Batch</span>
+                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v3.1 Batch</span>
                         
                         <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
                             <p>Herramienta interna para el equipo de diseño.</p>
