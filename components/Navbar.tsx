@@ -16,8 +16,11 @@ const Navbar: React.FC<NavbarProps> = ({ onSettingsClick, isDarkMode, onToggleTh
             <div className="bg-novey-red p-2 rounded-lg text-white shadow-sm">
                 <ScanLine className="h-6 w-6" />
             </div>
-            <div>
+            <div className="flex items-baseline gap-2">
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">ART INSPECTOR</h1>
+                <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50 uppercase tracking-wide">
+                    Beta
+                </span>
             </div>
           </div>
           <div className="flex items-center gap-2">

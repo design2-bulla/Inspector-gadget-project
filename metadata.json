@@ -1,5 +1,5 @@
 {
-  "name": "ART INSPECTOR",
+  "name": "ART INSPECTOR (BETA)",
   "description": "Una herramienta impulsada por IA para diseñadores de Novey. Extrae automáticamente códigos SKU de imágenes de arte y valida su existencia en el sitio web oficial.",
   "requestFramePermissions": []
 }

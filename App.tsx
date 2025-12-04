@@ -232,7 +232,10 @@ const App: React.FC = () => {
                           <Key className="w-8 h-8 text-novey-red" />
                       </div>
                   </div>
-                  <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">Bienvenido a Art Inspector</h1>
+                  <h1 className="text-2xl font-bold text-center text-gray-900 mb-2 flex items-center justify-center gap-2">
+                    Art Inspector
+                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full border border-red-200">BETA</span>
+                  </h1>
                   <p className="text-center text-gray-500 mb-6 text-sm">
                       Para comenzar, necesitamos conectar la herramienta con los servicios de Google AI.
                   </p>
@@ -281,7 +284,12 @@ const App: React.FC = () => {
         {queue.length === 0 ? (
           <div className="animate-fade-in-up max-w-4xl mx-auto mt-8">
             <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold mb-3 text-gray-800 dark:text-white">Art Inspector</h2>
+              <h2 className="text-3xl font-bold mb-3 text-gray-800 dark:text-white flex items-center justify-center gap-3">
+                Art Inspector
+                <span className="text-sm bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full border border-blue-200 dark:border-blue-800 font-semibold tracking-wide">
+                    BETA
+                </span>
+              </h2>
               <p className="text-lg text-gray-600 dark:text-gray-300 font-medium">
                 Sube tus diseños (por lote) para validar SKUs, precios y ortografía.
               </p>
@@ -470,8 +478,10 @@ const App: React.FC = () => {
                         <div className="bg-novey-red p-3 rounded-xl mb-4 shadow-lg shadow-novey-red/20">
                              <Laptop className="w-8 h-8 text-white" />
                         </div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Art Inspector</h2>
-                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300 mt-2">v3.1 Batch</span>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            Art Inspector 
+                            <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500 dark:text-gray-300">BETA</span>
+                        </h2>
                         
                         <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
                             <p>Herramienta interna para el equipo de diseño, desarrollada por el team novey en making bulla.</p>
