@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExternalLink, CheckCircle, Search, Copy, ShoppingCart, AlertTriangle, XCircle, Tag, Grid, Layout, SpellCheck, ArrowRight, DollarSign, Lightbulb } from 'lucide-react';
+import { ExternalLink, CheckCircle, Search, Copy, ShoppingCart, AlertTriangle, XCircle, Tag, Grid, Layout, SpellCheck, ArrowRight, DollarSign, Lightbulb, ImageOff } from 'lucide-react';
 import { ProductResultItem, NoveyProductDetails, SpellingAnalysis } from '../types';
 
 interface SkuResultProps {
@@ -12,7 +12,7 @@ interface SkuResultProps {
 
 const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
     const [imgError, setImgError] = useState(false);
-    const { sku, details, priceOnArt } = item;
+    const { sku, details, priceOnArt, visualDescription, contentMismatch } = item;
     
     const isMatchFound = details.found;
     const hasDiscount = details.regularPrice && details.regularPrice !== details.price;
@@ -50,7 +50,7 @@ const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
             relative rounded-xl shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.02] flex flex-col h-full
             bg-white dark:bg-gray-800
             ${isMatchFound 
-                ? (isPriceMismatch ? 'border-red-300 dark:border-red-800/50 ring-1 ring-red-200 dark:ring-red-900/30' : 'border-gray-200 dark:border-gray-700') 
+                ? (isPriceMismatch || contentMismatch ? 'border-red-300 dark:border-red-800/50 ring-1 ring-red-200 dark:ring-red-900/30' : 'border-gray-200 dark:border-gray-700') 
                 : 'border-orange-300 dark:border-orange-800/50 ring-1 ring-orange-100 dark:ring-orange-900/30'}
         `}>
             {/* Status Header */}
@@ -95,6 +95,14 @@ const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
                     ERROR PRECIO
                 </div>
             )}
+            
+            {/* Content Mismatch Warning Overlay */}
+            {contentMismatch && (
+                <div className="absolute top-12 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10 flex items-center gap-1 animate-pulse">
+                    <ImageOff className="w-3 h-3" />
+                    IMAGEN INCORRECTA
+                </div>
+            )}
 
             {/* Image Section */}
             <div className="h-48 p-4 flex items-center justify-center bg-gray-50/50 dark:bg-gray-900/50 relative overflow-hidden group border-b border-gray-100 dark:border-gray-700/50">
@@ -123,6 +131,26 @@ const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
                 <h4 className="text-sm font-bold text-gray-900 dark:text-white leading-tight mb-3 line-clamp-2 min-h-[2.5em]" title={details.title}>
                     {details.title || "Producto no identificado en web"}
                 </h4>
+
+                {/* Content Mismatch Detail */}
+                {contentMismatch && (
+                    <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded p-2 text-xs">
+                        <p className="font-bold text-red-700 dark:text-red-400 mb-1 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Incoherencia Visual
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 text-[10px]">
+                            <div>
+                                <span className="text-gray-500 block">En Imagen:</span>
+                                <span className="font-medium text-gray-800 dark:text-gray-200">{visualDescription || "Desconocido"}</span>
+                            </div>
+                            <div>
+                                <span className="text-gray-500 block">En Web:</span>
+                                <span className="font-medium text-gray-800 dark:text-gray-200 line-clamp-2">{details.title}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="mt-auto">
                      {isMatchFound ? (

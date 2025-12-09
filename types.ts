@@ -3,6 +3,7 @@
 export interface ExtractedProductRaw {
   sku: string;
   priceOnArt?: number; // Price found visually on the image next to the SKU
+  visualDescription?: string; // Short description of what the object looks like
 }
 
 export interface ExtractedSkuResult {
@@ -23,6 +24,8 @@ export interface NoveyProductDetails {
 export interface ProductResultItem {
   sku: string;
   priceOnArt?: number; // The visual price detected by AI
+  visualDescription?: string; // The visual description from the art
+  contentMismatch?: boolean; // Flag if visual desc matches web title
   details: NoveyProductDetails;
 }
 

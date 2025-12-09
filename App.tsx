@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
-import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
+import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey, verifyContentMatch } from './services/geminiService';
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
 import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle } from 'lucide-react';
 
@@ -129,12 +129,22 @@ const App: React.FC = () => {
               // Update status to VALIDATING
               updateItemStatus(item.id, 'VALIDATING');
 
-              // 2. Validate SKUs
+              // 2. Validate SKUs and Verify Content Mismatch
               const validationPromises = foundProducts.map(async (product) => {
                   const details = await validateSkuWithWeb(product.sku);
+                  
+                  // 3. New Step: Verify if Visual Description matches Web Title
+                  let contentMismatch = false;
+                  if (details.found && details.title && product.visualDescription) {
+                      const isMatch = await verifyContentMatch(product.visualDescription, details.title);
+                      contentMismatch = !isMatch; // If match is false, then mismatch is true
+                  }
+
                   return { 
                       sku: product.sku, 
                       priceOnArt: product.priceOnArt, 
+                      visualDescription: product.visualDescription,
+                      contentMismatch: contentMismatch,
                       details 
                   };
               });

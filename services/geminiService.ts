@@ -32,7 +32,7 @@ export const saveManualApiKey = (key: string) => {
 };
 
 /**
- * Extracts multiple SKUs AND their associated visual prices from a provided image.
+ * Extracts multiple SKUs, their prices, and a visual description of the product.
  */
 export const extractSkuFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedSkuResult> => {
   try {
@@ -54,12 +54,12 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
             Identify ALL product blocks. For each product block, extract:
             1. The SKU code (Reference/Ref/Item).
             2. The MAIN PRICE shown visually for that specific item.
+            3. A short VISUAL DESCRIPTION of the product associated with that SKU (e.g. "Red plastic chair", "Drill set", "Toilet seat").
 
             Context:
             - A "product block" usually consists of a product image, a price, and a SKU.
             - If there is a "Sale Price" and a "Regular Price" visually, grab the SALE PRICE (the main big one).
-            - Convert the price to a number (e.g. if image says "$12.99", return 12.99).
-            - If no price is clearly associated with the SKU, return null for price.
+            - Convert the price to a number.
             
             Return a JSON object containing an array of product objects.`
           }
@@ -77,9 +77,10 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
                 type: Type.OBJECT,
                 properties: {
                     sku: { type: Type.STRING, description: "The SKU code detected" },
-                    priceOnArt: { type: Type.NUMBER, description: "The numeric price detected visually", nullable: true }
+                    priceOnArt: { type: Type.NUMBER, description: "The numeric price detected visually", nullable: true },
+                    visualDescription: { type: Type.STRING, description: "Short visual description of the item (3-5 words)" }
                 },
-                required: ["sku"]
+                required: ["sku", "visualDescription"]
               }
             }
           },
@@ -98,7 +99,6 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
     // Clean and deduplicate based on SKU
     const rawProducts = parsed.products || [];
     
-    // Simple dedup logic: keep the first occurrence of a SKU
     const uniqueProducts: any[] = [];
     const seenSkus = new Set();
 
@@ -108,7 +108,8 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
             seenSkus.add(cleanSku);
             uniqueProducts.push({
                 sku: cleanSku,
-                priceOnArt: p.priceOnArt
+                priceOnArt: p.priceOnArt,
+                visualDescription: p.visualDescription
             });
         }
     }
@@ -122,6 +123,49 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
     throw error;
   }
 };
+
+/**
+ * Checks if the visual description from the art matches the product title from the web.
+ */
+export const verifyContentMatch = async (visualDescription: string, webTitle: string): Promise<boolean> => {
+    if (!visualDescription || !webTitle) return true; // Can't compare, assume safe
+
+    try {
+        const ai = getAiClient();
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Compare these two product descriptions. 
+            Visual from Image: "${visualDescription}"
+            Web Title: "${webTitle}"
+            
+            Are they describing the SAME TYPE of object? 
+            Return TRUE if they are compatible (e.g. "Silla" vs "Silla de playa").
+            Return FALSE if they are completely different objects (e.g. "Silla" vs "Olla", "Taladro" vs "Lámpara").
+            
+            Respond with JSON { match: boolean }`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        match: { type: Type.BOOLEAN }
+                    },
+                    required: ["match"]
+                }
+            }
+        });
+
+        const json = JSON.parse(response.text || "{}");
+        // If match is TRUE, then there is NO mismatch.
+        // If match is FALSE, there IS a mismatch.
+        // We want to return 'true' if they MATCH.
+        return json.match === true;
+
+    } catch (e) {
+        console.error("Error verifying content match", e);
+        return true; // Default to passing in case of error
+    }
+}
 
 /**
  * Analyzes the image for Spanish spelling and grammar errors.
