@@ -147,7 +147,7 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
               CRITICAL RULES TO AVOID HALLUCINATIONS:
               1. ONLY analyze text that is CLEARLY VISIBLE and LEGIBLE in the image.
               2. DO NOT invent words. If a word is not in the image, DO NOT report it.
-              3. If you are not 100% sure a word is spelled wrong due to low resolution, IGNORE IT.
+              3. If you see ANY mark above a vowel (pixel, dust, artistic design), assume it is an accent. DO NOT correct words that might have an accent in a weird font.
               
               Identify spelling errors, specifically:
               1. Missing accents/tildes (CRITICAL). Even in UPPERCASE words or small legal text. 
@@ -220,15 +220,18 @@ export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetai
       2. If not found, search for SKU "${cleanSku}" (without hyphens).
       3. Look for the specific product page on novey.com.pa.
 
-      Return a JSON object (strictly valid JSON) with:
-      - found: boolean (true ONLY if you found a matching product page on novey.com.pa)
+      Extraction Rules:
       - title: The full name of the product.
       - price: The CURRENT selling price (e.g. "$12.99").
       - regularPrice: The original price BEFORE discount (if visible).
       - url: The direct link to the product.
-      - imageUrl: Direct URL to the product image.
+      - imageUrl: Look for the main product image. Preferably extract the 'og:image' meta tag URL if available in the snippet, or the main product image URL. It must be a direct link (ending in .jpg, .png, etc.) if possible.
       
-      If you cannot find the specific SKU on Novey, set "found" to false.`,
+      If you cannot find the specific SKU on Novey:
+      - Set "found" to false.
+      - If you found a VERY similar product (e.g. same product but SKU format is different, like N0123 vs 123), return that SKU in the "skuSuggestion" field.
+      
+      Return a JSON object (strictly valid JSON).`,
       config: {
         tools: [{ googleSearch: {} }]
       }
@@ -246,7 +249,8 @@ export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetai
         regularPrice: data.regularPrice,
         url: data.url,
         imageUrl: data.imageUrl,
-        description: data.description
+        description: data.description,
+        skuSuggestion: data.skuSuggestion
       };
     } catch (parseError) {
       console.error("Failed to parse validation JSON:", text);

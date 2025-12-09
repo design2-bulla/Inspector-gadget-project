@@ -31,6 +31,20 @@ const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
     // Simple logic: if Art price is defined and differs > 0.05 from web price
     const isPriceMismatch = isMatchFound && artPriceVal > 0 && Math.abs(webPriceVal - artPriceVal) > 0.05;
 
+    // Proxy the image URL to bypass CORS/Hotlink protections
+    // We use wsrv.nl, a free and reliable image proxy.
+    const getProxiedUrl = (url?: string) => {
+        if (!url) return undefined;
+        // If it's already a data URI or blob, return as is
+        if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+        
+        // Encode the URL and pass it to wsrv.nl
+        // w=400 optimizes width, output=jpg ensures compatibility
+        return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&output=jpg`;
+    };
+
+    const displayImageUrl = getProxiedUrl(details.imageUrl);
+
     return (
         <div className={`
             relative rounded-xl shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.02] flex flex-col h-full
@@ -84,12 +98,13 @@ const ProductCard: React.FC<{ item: ProductResultItem }> = ({ item }) => {
 
             {/* Image Section */}
             <div className="h-48 p-4 flex items-center justify-center bg-gray-50/50 dark:bg-gray-900/50 relative overflow-hidden group border-b border-gray-100 dark:border-gray-700/50">
-                 {details.imageUrl && !imgError ? (
+                 {displayImageUrl && !imgError ? (
                     <img 
-                        src={details.imageUrl} 
+                        src={displayImageUrl} 
                         alt={details.title}
                         className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-300"
                         onError={() => setImgError(true)}
+                        loading="lazy"
                     />
                  ) : (
                     <div className="flex flex-col items-center justify-center text-gray-300 dark:text-gray-600">
