@@ -4,7 +4,9 @@ import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
 import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle } from 'lucide-react';
+
+const INSPECTOR_LOGO = "https://i.postimg.cc/tJnXV91p/inspector-gadget.png";
 
 const App: React.FC = () => {
   const [hasKey, setHasKey] = useState<boolean>(true);
@@ -196,6 +198,15 @@ const App: React.FC = () => {
       processingRef.current = false;
   };
 
+  const cancelAllPending = () => {
+    // Keep only completed or error items (remove pending and analyzing)
+    // Note: Items currently 'ANALYZING' in the background will still finish their promise loop
+    // but they will be removed from the UI immediately.
+    setQueue(prev => prev.filter(i => i.status === 'COMPLETED' || i.status === 'ERROR'));
+    setIsProcessing(false);
+    processingRef.current = false;
+  };
+
   const removeQueueItem = (id: string) => {
       setQueue(prev => prev.filter(i => i.id !== id));
   };
@@ -228,8 +239,13 @@ const App: React.FC = () => {
           <div className="min-h-screen bg-gradient-to-br from-novey-red to-red-900 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in-up">
                   <div className="flex justify-center mb-6">
-                      <div className="bg-red-100 p-4 rounded-full">
-                          <Key className="w-8 h-8 text-novey-red" />
+                      <div className="relative group">
+                        <div className="absolute -inset-1 bg-gradient-to-r from-red-600 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
+                        <img 
+                            src={INSPECTOR_LOGO} 
+                            alt="Inspector Gadget" 
+                            className="relative w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl"
+                        />
                       </div>
                   </div>
                   <h1 className="text-2xl font-bold text-center text-gray-900 mb-2 flex items-center justify-center gap-2">
@@ -275,6 +291,7 @@ const App: React.FC = () => {
         onSettingsClick={() => setShowSettings(true)} 
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
+        logoSrc={INSPECTOR_LOGO}
       />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -302,30 +319,33 @@ const App: React.FC = () => {
             <div className="mt-12 grid grid-cols-3 gap-6 text-center">
                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full w-fit mx-auto mb-4">
-                        <ImageIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                        <ImageIcon className="w-10 h-10 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">1. Carga Múltiple</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Arrastra hasta 10 imágenes a la vez</p>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">1. Carga Múltiple</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden sm:block">Arrastra hasta 10 imágenes a la vez</p>
                 </div>
                  <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-full w-fit mx-auto mb-4">
-                        <ScanLine className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                        <ScanLine className="w-10 h-10 text-purple-600 dark:text-purple-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">2. Análisis en Cola</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Procesamos uno a uno automáticamente</p>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">2. Análisis en Cola</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden sm:block">Procesamos uno a uno automáticamente</p>
                 </div>
                  <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-full w-fit mx-auto mb-4">
-                        <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                        <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
                     </div>
-                    <h3 className="text-base font-bold text-gray-800 dark:text-gray-100">3. Reporte Completo</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">SKU, Precios y Ortografía por imagen</p>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">3. Reporte Completo</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden sm:block">SKU, Precios y Ortografía por imagen</p>
                 </div>
             </div>
           </div>
         ) : (
             // QUEUE LIST VIEW
             <div className="animate-fade-in">
+                {/* NEW: Compact Dropzone for adding more files */}
+                <Dropzone onImagesSelected={handleImagesSelected} compact={true} />
+
                 {/* Header Actions */}
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
                     <div>
@@ -352,6 +372,18 @@ const App: React.FC = () => {
                             >
                                 <Play className="w-4 h-4 fill-current" />
                                 Continuar Cola
+                            </button>
+                        )}
+
+                        {/* Global Cancel Button */}
+                        {queue.some(i => i.status === 'PENDING' || i.status === 'ANALYZING' || i.status === 'VALIDATING') && (
+                             <button 
+                                onClick={cancelAllPending}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/50 rounded-lg text-sm font-medium transition-colors"
+                                title="Cancelar todos los análisis pendientes"
+                            >
+                                <StopCircle className="w-4 h-4" />
+                                Cancelar Pendientes
                             </button>
                         )}
                         
@@ -396,15 +428,22 @@ const App: React.FC = () => {
                                     </span>
                                     {renderStatusIcon(item.status)}
                                     
-                                    {item.status !== 'ANALYZING' && item.status !== 'VALIDATING' && (
-                                        <button 
-                                            onClick={() => removeQueueItem(item.id)}
-                                            className="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                            title="Eliminar de la lista"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
+                                    {/* Dynamic Cancel/Delete Button */}
+                                    <button 
+                                        onClick={() => removeQueueItem(item.id)}
+                                        className={`ml-2 p-1 transition-colors rounded-full ${
+                                            (item.status === 'ANALYZING' || item.status === 'VALIDATING') 
+                                            ? 'text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30' 
+                                            : 'text-gray-400 hover:text-red-500'
+                                        }`}
+                                        title={(item.status === 'ANALYZING' || item.status === 'VALIDATING') ? "Cancelar proceso" : "Eliminar de la lista"}
+                                    >
+                                        {(item.status === 'ANALYZING' || item.status === 'VALIDATING') ? (
+                                            <StopCircle className="w-6 h-6 animate-pulse" />
+                                        ) : (
+                                            <X className="w-5 h-5" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
 
@@ -475,8 +514,8 @@ const App: React.FC = () => {
                     </button>
                     
                     <div className="flex flex-col items-center text-center">
-                        <div className="bg-novey-red p-3 rounded-xl mb-4 shadow-lg shadow-novey-red/20">
-                             <Laptop className="w-8 h-8 text-white" />
+                        <div className="mb-4">
+                            <img src={INSPECTOR_LOGO} className="w-20 h-20 rounded-full object-cover border-4 border-gray-100 dark:border-gray-700 shadow-md" alt="Logo" />
                         </div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             Art Inspector 

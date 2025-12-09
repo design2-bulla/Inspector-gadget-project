@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, Layers } from 'lucide-react';
+import { Upload, Layers, Plus } from 'lucide-react';
 
 interface FileData {
     base64: string;
@@ -10,9 +10,10 @@ interface FileData {
 interface DropzoneProps {
   onImagesSelected: (files: FileData[]) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
-const Dropzone: React.FC<DropzoneProps> = ({ onImagesSelected, disabled }) => {
+const Dropzone: React.FC<DropzoneProps> = ({ onImagesSelected, disabled, compact = false }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -69,6 +70,49 @@ const Dropzone: React.FC<DropzoneProps> = ({ onImagesSelected, disabled }) => {
     }
   };
 
+  if (compact) {
+    return (
+        <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`
+                relative group cursor-pointer transition-all duration-300 ease-in-out
+                border-2 border-dashed rounded-xl flex items-center justify-center
+                w-full h-24 mb-8
+                ${isDragging 
+                ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                }
+                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+            `}
+        >
+            <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                onChange={handleFileInput}
+                disabled={disabled}
+            />
+            <div className="flex items-center gap-4 pointer-events-none">
+                <div className={`p-2 rounded-full transition-colors ${isDragging ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                    <Plus className="w-6 h-6" />
+                </div>
+                <div className="text-left">
+                    <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        Añadir más artes a la cola
+                    </h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Arrastra archivos aquí o haz clic para subir
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+  }
+
+  // Normal Large Mode
   return (
     <div
       onDragOver={handleDragOver}
