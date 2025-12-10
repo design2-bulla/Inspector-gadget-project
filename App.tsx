@@ -4,7 +4,7 @@ import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
 import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle, Info } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle, Info, Lightbulb } from 'lucide-react';
 
 const INSPECTOR_LOGO = "https://i.postimg.cc/tJnXV91p/inspector-gadget.png";
 
@@ -332,10 +332,19 @@ const App: React.FC = () => {
                 <Dropzone onImagesSelected={handleImagesSelected} />
             </div>
 
-            <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-4 max-w-lg mx-auto flex items-center justify-center gap-1">
-                <Info className="w-3 h-3" />
-                Sugerencia: Sube lotes de máximo 5 imágenes para evitar pausas por límite de la IA.
-            </p>
+            {/* NEW TIP SECTION */}
+            <div className="mt-6 flex flex-col items-center space-y-2">
+                <div className="bg-yellow-50 dark:bg-yellow-900/10 text-yellow-800 dark:text-yellow-200 px-4 py-2 rounded-lg border border-yellow-100 dark:border-yellow-800/30 flex items-center gap-2 shadow-sm">
+                    <Lightbulb className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                    <p className="text-xs font-medium">
+                        <strong>Tip:</strong> Si se quiere un uso óptimo de la app, lo recomendable es subir <strong>uno por uno</strong> cada arte.
+                    </p>
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    Puedes subir lotes de hasta 5 imágenes, pero podría ser más lento.
+                </p>
+            </div>
 
             <div className="mt-12 grid grid-cols-3 gap-6 text-center">
                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
