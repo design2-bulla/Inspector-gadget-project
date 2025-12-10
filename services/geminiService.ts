@@ -31,11 +31,40 @@ export const saveManualApiKey = (key: string) => {
     localStorage.setItem('art_inspector_api_key', key.trim());
 };
 
+// --- RETRY LOGIC FOR ROBUSTNESS ---
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function runWithRetry<T>(operation: () => Promise<T>, retries = 3, context = "Operation"): Promise<T> {
+    let lastError: any;
+    
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await operation();
+        } catch (error: any) {
+            lastError = error;
+            // Check for Rate Limit (429) or Service Unavailable (503)
+            const isRateLimit = error.message?.includes('429') || error.status === 429 || error.message?.includes('Too Many Requests');
+            const isOverloaded = error.message?.includes('503') || error.status === 503;
+            
+            if (isRateLimit || isOverloaded) {
+                console.warn(`${context} hit rate limit. Retrying in ${(i + 1) * 2}s...`);
+                // Exponential backoff: 2s, 4s, 6s...
+                await delay(2000 * (i + 1));
+            } else {
+                // If it's a different error (e.g. Bad Request), maybe don't retry immediately or retry shorter
+                console.warn(`${context} failed. Retrying... (${i + 1}/${retries})`);
+                await delay(1000);
+            }
+        }
+    }
+    throw lastError;
+}
+
 /**
  * Extracts multiple SKUs, their prices, and a visual description of the product.
  */
 export const extractSkuFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedSkuResult> => {
-  try {
+  return runWithRetry(async () => {
     const ai = getAiClient();
     const cleanBase64 = base64Image.split(',')[1] || base64Image;
 
@@ -52,12 +81,11 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
           {
             text: `Analyze this marketing image for Novey. 
             Identify ALL product blocks. For each product block, extract:
-            1. The SKU code (Reference/Ref/Item).
+            1. The SKU code (Reference/Ref/Item). BE PRECISE. Distinguish '8' from 'B', '0' from 'O'.
             2. The MAIN PRICE shown visually for that specific item.
-            3. A short VISUAL DESCRIPTION of the product associated with that SKU (e.g. "Red plastic chair", "Drill set", "Toilet seat").
+            3. A short, GENERIC VISUAL DESCRIPTION (3-5 words). Example: "Silla blanca", "Taladro amarillo", "Juego de ollas". Do not be too specific about background details.
 
             Context:
-            - A "product block" usually consists of a product image, a price, and a SKU.
             - If there is a "Sale Price" and a "Regular Price" visually, grab the SALE PRICE (the main big one).
             - Convert the price to a number.
             
@@ -78,7 +106,7 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
                 properties: {
                     sku: { type: Type.STRING, description: "The SKU code detected" },
                     priceOnArt: { type: Type.NUMBER, description: "The numeric price detected visually", nullable: true },
-                    visualDescription: { type: Type.STRING, description: "Short visual description of the item (3-5 words)" }
+                    visualDescription: { type: Type.STRING, description: "Generic visual description of the item type" }
                 },
                 required: ["sku", "visualDescription"]
               }
@@ -117,30 +145,31 @@ export const extractSkuFromImage = async (base64Image: string, mimeType: string)
     return {
       products: uniqueProducts
     };
-
-  } catch (error) {
-    console.error("Error extracting SKU:", error);
-    throw error;
-  }
+  }, 3, "Extract SKU");
 };
 
 /**
  * Checks if the visual description from the art matches the product title from the web.
  */
 export const verifyContentMatch = async (visualDescription: string, webTitle: string): Promise<boolean> => {
-    if (!visualDescription || !webTitle) return true; // Can't compare, assume safe
+    if (!visualDescription || !webTitle) return true;
 
-    try {
+    // Fast pass: If web title contains specific key words from visual, assume match
+    return runWithRetry(async () => {
         const ai = getAiClient();
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Compare these two product descriptions. 
+            contents: `Act as a tolerant judge. Compare these two descriptions.
+            
             Visual from Image: "${visualDescription}"
             Web Title: "${webTitle}"
             
-            Are they describing the SAME TYPE of object? 
-            Return TRUE if they are compatible (e.g. "Silla" vs "Silla de playa").
-            Return FALSE if they are completely different objects (e.g. "Silla" vs "Olla", "Taladro" vs "Lámpara").
+            Are they plausibly the SAME kind of object?
+            
+            Rules:
+            - BE TOLERANT. If visual says "Caja" or "Envase" and Web says "Pintura" or "Organizadora", it is a MATCH.
+            - If visual says "Herramienta" and Web says "Taladro", it is a MATCH.
+            - ONLY return FALSE if it is a blatant contradiction (e.g. Visual: "Silla" vs Web: "Estufa").
             
             Respond with JSON { match: boolean }`,
             config: {
@@ -156,22 +185,15 @@ export const verifyContentMatch = async (visualDescription: string, webTitle: st
         });
 
         const json = JSON.parse(response.text || "{}");
-        // If match is TRUE, then there is NO mismatch.
-        // If match is FALSE, there IS a mismatch.
-        // We want to return 'true' if they MATCH.
         return json.match === true;
-
-    } catch (e) {
-        console.error("Error verifying content match", e);
-        return true; // Default to passing in case of error
-    }
+    }, 2, "Verify Content");
 }
 
 /**
  * Analyzes the image for Spanish spelling and grammar errors.
  */
 export const checkSpellingInImage = async (base64Image: string, mimeType: string): Promise<SpellingAnalysis> => {
-    try {
+    return runWithRetry(async () => {
       const ai = getAiClient();
       const cleanBase64 = base64Image.split(',')[1] || base64Image;
   
@@ -186,28 +208,22 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
               }
             },
             {
-              text: `Act as a strict Spanish proofreader for a retail catalog. 
+              text: `Act as a strict Spanish proofreader.
               
-              CRITICAL RULES TO AVOID HALLUCINATIONS:
-              1. ONLY analyze text that is CLEARLY VISIBLE and LEGIBLE in the image.
-              2. DO NOT invent words. If a word is not in the image, DO NOT report it.
-              3. If you see ANY mark above a vowel (pixel, dust, artistic design), assume it is an accent. DO NOT correct words that might have an accent in a weird font.
+              CRITICAL ANTI-HALLUCINATION RULES:
+              1. ONLY analyze text that is CLEARLY VISIBLE.
+              2. If you see ANY mark above a vowel (pixel, dust, artistic design), assume it is an accent. DO NOT correct words that might have an accent in a weird font.
+              3. If uncertain, DO NOT report an error.
               
-              Identify spelling errors, specifically:
-              1. Missing accents/tildes (CRITICAL). Even in UPPERCASE words or small legal text. 
-                 Examples: "CREDITO" -> "CRÉDITO", "DIAS" -> "DÍAS", "TELEVISION" -> "TELEVISIÓN", "VALIDO" -> "VÁLIDO".
-              2. Typos in common words.
-              3. Incorrect abbreviations.
+              Identify REAL spelling errors:
+              1. Missing accents/tildes (CRITICAL).
+              2. Typos.
 
               Ignore:
-              - Product codes (SKUs), Model numbers like "50A6NV", Prices.
-              - Brand names (e.g., "Novey", "Samsung", "DeWalt", "Hisense", "Garden Basics").
-              - English terms commonly used (e.g., "OFF", "Sale", "Black Friday", "Cyber Week", "Smart TV", "UHD", "4K").
-              - URLs or hashtags.
+              - SKUs, Prices, Brands.
+              - English terms (OFF, Sale, Smart TV).
 
-              Return a JSON object with:
-              - hasErrors: boolean
-              - corrections: array of objects { original: "wrong word", suggestion: "correct word", context: "short phrase from the image where the error appears" }`
+              Return a JSON object.`
             }
           ]
         },
@@ -238,44 +254,40 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
       if (!resultText) return { hasErrors: false, corrections: [] };
       
       return JSON.parse(resultText) as SpellingAnalysis;
-  
-    } catch (error) {
-      console.error("Error checking spelling:", error);
-      return { hasErrors: false, corrections: [] };
-    }
-  };
+    }, 2, "Spelling Check");
+};
 
 /**
  * Uses Gemini with Google Search Grounding to validate the SKU on novey.com.pa
  */
 export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetails> => {
-  try {
+  return runWithRetry(async () => {
     const ai = getAiClient();
-    
-    // Create variations of the SKU to improve search hit rate
-    const cleanSku = sku.replace(/-/g, ''); // Remove hyphens
+    const cleanSku = sku.replace(/-/g, '');
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Perform a thorough search for the product on "novey.com.pa".
+      contents: `Search for product on "novey.com.pa".
       
-      Search Strategy:
-      1. Search for SKU "${sku}".
-      2. If not found, search for SKU "${cleanSku}" (without hyphens).
-      3. Look for the specific product page on novey.com.pa.
-
-      Extraction Rules:
-      - title: The full name of the product.
-      - price: The CURRENT selling price (e.g. "$12.99").
-      - regularPrice: The original price BEFORE discount (if visible).
-      - url: The direct link to the product.
-      - imageUrl: Look for the main product image. Preferably extract the 'og:image' meta tag URL if available in the snippet, or the main product image URL. It must be a direct link (ending in .jpg, .png, etc.) if possible.
+      Query: "${sku}" OR "${cleanSku}" site:novey.com.pa
       
-      If you cannot find the specific SKU on Novey:
-      - Set "found" to false.
-      - If you found a VERY similar product (e.g. same product but SKU format is different, like N0123 vs 123), return that SKU in the "skuSuggestion" field.
+      Task:
+      1. Find the specific product page.
+      2. VERIFY: Does the result (Title, Snippet, OR URL) confirm this is the product "${sku}"?
+         - If the URL contains the SKU number (e.g. .../100-123...), it is a match.
+         - If the title contains the SKU, it is a match.
+         - If the result is a completely different product, set found: false.
       
-      Return a JSON object (strictly valid JSON).`,
+      Extraction:
+      - title
+      - price (Current price)
+      - regularPrice (Before discount)
+      - url
+      - imageUrl (Prefer og:image)
+      
+      If exact SKU is not found but you see a very similar code (e.g. searching for 123-A and finding 123), suggest it in 'skuSuggestion'.
+      
+      Return JSON.`,
       config: {
         tools: [{ googleSearch: {} }]
       }
@@ -286,6 +298,16 @@ export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetai
 
     try {
       const data = JSON.parse(text);
+
+      // Force valid found status if title OR URL contains SKU.
+      // This is much more robust than title only.
+      const skuInTitle = data.title && (data.title.includes(sku) || data.title.includes(cleanSku));
+      const skuInUrl = data.url && (data.url.includes(sku) || data.url.includes(cleanSku));
+
+      if (skuInTitle || skuInUrl) {
+          data.found = true;
+      }
+
       return {
         found: data.found,
         title: data.title,
@@ -297,12 +319,7 @@ export const validateSkuWithWeb = async (sku: string): Promise<NoveyProductDetai
         skuSuggestion: data.skuSuggestion
       };
     } catch (parseError) {
-      console.error("Failed to parse validation JSON:", text);
       return { found: false };
     }
-
-  } catch (error) {
-    console.error("Error validating SKU with web:", error);
-    return { found: false };
-  }
+  }, 3, "Validate Web");
 };

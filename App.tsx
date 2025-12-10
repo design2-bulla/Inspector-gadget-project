@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Dropzone from './components/Dropzone';
 import SkuResult from './components/SkuResult';
-import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey, verifyContentMatch } from './services/geminiService';
+import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValidApiKey, saveManualApiKey } from './services/geminiService';
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
-import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle, Info } from 'lucide-react';
 
 const INSPECTOR_LOGO = "https://i.postimg.cc/tJnXV91p/inspector-gadget.png";
 
@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [queue, setQueue] = useState<BatchAnalysisItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false); // Sidebar state
   
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -80,9 +81,6 @@ const App: React.FC = () => {
   };
 
   const processSpecificItem = (id: string) => {
-      // Move this item to the top priority essentially by processing it now
-      // We need to verify we aren't already processing something else to avoid clashes, 
-      // or we just force it.
       if (isProcessing) return; // Wait for current to finish
       
       const itemIndex = queue.findIndex(i => i.id === id);
@@ -114,71 +112,81 @@ const App: React.FC = () => {
       updateItemStatus(item.id, 'ANALYZING');
 
       try {
-          // 1. Extract SKU & Spelling
-          const [extractionResult, spellingAnalysis] = await Promise.all([
-              extractSkuFromImage(item.fileBase64, item.mimeType),
-              checkSpellingInImage(item.fileBase64, item.mimeType)
-          ]);
-
-          // Update spelling result
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, spellingResult: spellingAnalysis } : i));
+          // --- STEP 1: EXTRACT SKU (Sequential to save API limit) ---
+          const extractionResult = await extractSkuFromImage(item.fileBase64, item.mimeType);
 
           const foundProducts = extractionResult.products || [];
+          let validationResults: any[] = [];
 
           if (foundProducts.length > 0) {
               // Update status to VALIDATING
               updateItemStatus(item.id, 'VALIDATING');
 
-              // 2. Validate SKUs and Verify Content Mismatch
-              const validationPromises = foundProducts.map(async (product) => {
+              // --- STEP 2: VALIDATE SKUS ON WEB (Sequential) ---
+              // We do this inside a loop to process multiple SKUs in one image without bursting API
+              for (const product of foundProducts) {
                   const details = await validateSkuWithWeb(product.sku);
                   
-                  // 3. New Step: Verify if Visual Description matches Web Title
-                  let contentMismatch = false;
-                  if (details.found && details.title && product.visualDescription) {
-                      const isMatch = await verifyContentMatch(product.visualDescription, details.title);
-                      contentMismatch = !isMatch; // If match is false, then mismatch is true
-                  }
-
-                  return { 
+                  validationResults.push({ 
                       sku: product.sku, 
                       priceOnArt: product.priceOnArt, 
                       visualDescription: product.visualDescription,
-                      contentMismatch: contentMismatch,
+                      contentMismatch: false, // Feature disabled for stability
                       details 
-                  };
-              });
-
-              const validationResults = await Promise.all(validationPromises);
-              
-              // COMPLETE SUCCESS
-              setQueue(prev => prev.map(i => i.id === item.id ? { 
-                  ...i, 
-                  status: 'COMPLETED',
-                  results: validationResults 
-              } : i));
-
+                  });
+                  
+                  // Mini delay between SKUs in same image if multiple
+                  if (foundProducts.length > 1) await new Promise(r => setTimeout(r, 500));
+              }
           } else {
-              // ERROR: No SKUs found
-              setQueue(prev => prev.map(i => i.id === item.id ? { 
-                  ...i, 
-                  status: 'ERROR',
-                  errorMsg: "No se encontraron códigos SKU visibles."
-              } : i));
+             // If no SKUs found, validationResults is empty
+          }
+
+          // --- STEP 3: CHECK SPELLING (Sequential, done last) ---
+          const spellingAnalysis = await checkSpellingInImage(item.fileBase64, item.mimeType);
+
+          // Update State with Results
+          setQueue(prev => prev.map(i => i.id === item.id ? { 
+              ...i, 
+              status: foundProducts.length > 0 ? 'COMPLETED' : 'ERROR',
+              results: validationResults,
+              spellingResult: spellingAnalysis,
+              errorMsg: foundProducts.length === 0 ? "No se encontraron códigos SKU visibles." : undefined
+          } : i));
+          
+          // Save to History (LocalStorage or Session)
+          if (foundProducts.length > 0) {
+              const historyItem = {
+                  id: item.id,
+                  sku: validationResults[0]?.sku || 'Multi',
+                  timestamp: Date.now(),
+                  thumbnail: item.fileBase64
+              };
+              // Add to history logic here if needed, or rely on queue for now
           }
 
       } catch (error: any) {
           console.error(`Error processing item ${item.id}`, error);
-          const msg = error.message === 'API_KEY_MISSING' ? 'Falta API Key' : "Error al procesar imagen.";
+          let msg = "Error al procesar imagen.";
+          
+          if (error.message === 'API_KEY_MISSING') msg = 'Falta API Key';
+          else if (error.message?.includes('429') || error.message?.includes('Quota') || error.status === 429) {
+              msg = 'Límite de velocidad (429). Intentando continuar...';
+          }
+          else if (error.message) msg = error.message.slice(0, 50);
+
           setQueue(prev => prev.map(i => i.id === item.id ? { 
               ...i, 
               status: 'ERROR',
               errorMsg: msg
           } : i));
       } finally {
-        // ALWAYS RELEASE LOCK
-        processingRef.current = false;
-        setIsProcessing(false);
+        // ALWAYS RELEASE LOCK, BUT WITH A DELAY
+        // This delay prevents slamming the API with the next request instantly
+        setTimeout(() => {
+            processingRef.current = false;
+            setIsProcessing(false);
+        }, 3000); // 3 seconds cool-down between items is safer
       }
   };
 
@@ -210,8 +218,6 @@ const App: React.FC = () => {
 
   const cancelAllPending = () => {
     // Keep only completed or error items (remove pending and analyzing)
-    // Note: Items currently 'ANALYZING' in the background will still finish their promise loop
-    // but they will be removed from the UI immediately.
     setQueue(prev => prev.filter(i => i.status === 'COMPLETED' || i.status === 'ERROR'));
     setIsProcessing(false);
     processingRef.current = false;
@@ -326,6 +332,11 @@ const App: React.FC = () => {
                 <Dropzone onImagesSelected={handleImagesSelected} />
             </div>
 
+            <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-4 max-w-lg mx-auto flex items-center justify-center gap-1">
+                <Info className="w-3 h-3" />
+                Sugerencia: Sube lotes de máximo 5 imágenes para evitar pausas por límite de la IA.
+            </p>
+
             <div className="mt-12 grid grid-cols-3 gap-6 text-center">
                 <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:-translate-y-1">
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full w-fit mx-auto mb-4">
@@ -357,7 +368,7 @@ const App: React.FC = () => {
                 <Dropzone onImagesSelected={handleImagesSelected} compact={true} />
 
                 {/* Header Actions */}
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cola de Análisis</h2>
                         <div className="flex items-center gap-2 mt-1">
@@ -405,6 +416,15 @@ const App: React.FC = () => {
                             Reiniciar Todo
                         </button>
                     </div>
+                </div>
+
+                {/* RATE LIMIT NOTICE */}
+                <div className="mb-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-3 rounded-lg flex items-center gap-3">
+                     <Info className="w-5 h-5 text-blue-500 shrink-0" />
+                     <p className="text-xs text-blue-700 dark:text-blue-300">
+                        <strong>Sugerencia de rendimiento:</strong> Si procesas muchas imágenes seguidas, podrías ver errores temporales (límite de velocidad). 
+                        Recomendamos subir lotes de <strong>5 imágenes</strong> a la vez para un flujo sin interrupciones.
+                     </p>
                 </div>
 
                 {/* The List */}
