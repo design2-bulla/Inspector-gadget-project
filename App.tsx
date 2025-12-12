@@ -6,17 +6,20 @@ import { extractSkuFromImage, validateSkuWithWeb, checkSpellingInImage, hasValid
 import { AppState, BatchAnalysisItem, BatchItemStatus } from './types';
 import { Loader2, AlertCircle, Image as ImageIcon, CheckCircle, ScanLine, Globe, X, Laptop, Key, ChevronRight, Plus, RefreshCw, Play, StopCircle, Info, Lightbulb } from 'lucide-react';
 
-const INSPECTOR_LOGO = "https://i.postimg.cc/tJnXV91p/inspector-gadget.png";
+// Updated Logo - Using likely direct link format based on PostImage ID
+const DEFAULT_LOGO = "https://i.postimg.cc/NyJDnd0H/image.png";
 
 const App: React.FC = () => {
   const [hasKey, setHasKey] = useState<boolean>(true);
   const [manualKeyInput, setManualKeyInput] = useState('');
   
+  // Custom Logo State - Fixed to constant for consistency across all users
+  const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
+
   // New Queue System State
   const [queue, setQueue] = useState<BatchAnalysisItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showHistory, setShowHistory] = useState(false); // Sidebar state
   
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -28,6 +31,7 @@ const App: React.FC = () => {
     const valid = hasValidApiKey();
     setHasKey(valid);
 
+    // Theme loading
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         setIsDarkMode(true);
@@ -36,6 +40,8 @@ const App: React.FC = () => {
         setIsDarkMode(false);
         document.documentElement.classList.remove('dark');
     }
+
+    // Logo persistence removed to enforce the corporate logo in DEFAULT_LOGO
   }, []);
 
   // -- THEME LOGIC --
@@ -258,9 +264,14 @@ const App: React.FC = () => {
                       <div className="relative group">
                         <div className="absolute -inset-1 bg-gradient-to-r from-red-600 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
                         <img 
-                            src={INSPECTOR_LOGO} 
+                            src={logoUrl} 
                             alt="Inspector Gadget" 
-                            className="relative w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl"
+                            className="relative w-24 h-24 rounded-full object-contain border-4 border-white shadow-xl bg-white p-2"
+                            onError={(e) => {
+                                // Fallback to icon if image fails
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement?.classList.add('hidden');
+                            }}
                         />
                       </div>
                   </div>
@@ -307,7 +318,7 @@ const App: React.FC = () => {
         onSettingsClick={() => setShowSettings(true)} 
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
-        logoSrc={INSPECTOR_LOGO}
+        logoSrc={logoUrl}
       />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -317,6 +328,17 @@ const App: React.FC = () => {
         {queue.length === 0 ? (
           <div className="animate-fade-in-up max-w-4xl mx-auto mt-8">
             <div className="text-center mb-10">
+              
+              {/* BRAND LOGO DISPLAY */}
+              <div className="flex justify-center mb-6">
+                 <img 
+                    src={logoUrl} 
+                    alt="Logo Principal" 
+                    className="h-32 w-auto object-contain drop-shadow-xl hover:scale-105 transition-transform duration-500"
+                    onError={(e) => e.currentTarget.style.display = 'none'}
+                 />
+              </div>
+
               <h2 className="text-3xl font-bold mb-3 text-gray-800 dark:text-white flex items-center justify-center gap-3">
                 Art Inspector
                 <span className="text-sm bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full border border-blue-200 dark:border-blue-800 font-semibold tracking-wide">
@@ -554,7 +576,14 @@ const App: React.FC = () => {
                     
                     <div className="flex flex-col items-center text-center">
                         <div className="mb-4">
-                            <img src={INSPECTOR_LOGO} className="w-20 h-20 rounded-full object-cover border-4 border-gray-100 dark:border-gray-700 shadow-md" alt="Logo" />
+                            <img 
+                                src={logoUrl} 
+                                className="w-20 h-20 rounded-full object-contain border-4 border-gray-100 dark:border-gray-700 shadow-md bg-white p-1" 
+                                alt="Logo" 
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                }}
+                            />
                         </div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             Art Inspector 
@@ -562,11 +591,10 @@ const App: React.FC = () => {
                         </h2>
                         
                         <div className="my-6 text-sm text-gray-600 dark:text-gray-400 space-y-2">
-                            <p>Herramienta interna para el equipo de diseño, desarrollada por el team novey en making bulla.</p>
-                            <p className="text-gray-400 dark:text-gray-500 text-xs mt-4">
-                                Powered by Gemini AI
-                            </p>
+                            <p>Herramienta interna para el equipo de diseño.</p>
                         </div>
+
+                        <hr className="w-full border-gray-100 dark:border-gray-700 mb-6" />
                         
                         <button
                             className="text-xs text-red-500 hover:text-red-600 underline mb-6"

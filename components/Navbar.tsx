@@ -5,17 +5,35 @@ interface NavbarProps {
   onSettingsClick?: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
+  logoSrc?: string;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ onSettingsClick, isDarkMode, onToggleTheme }) => {
+const Navbar: React.FC<NavbarProps> = ({ onSettingsClick, isDarkMode, onToggleTheme, logoSrc }) => {
+  // State to track if image failed to load (e.g. user provided a viewer link instead of direct image)
+  const [imgError, setImgError] = React.useState(false);
+
+  // Reset error state if the source changes
+  React.useEffect(() => {
+    setImgError(false);
+  }, [logoSrc]);
+
   return (
     <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 h-16 flex items-center transition-colors duration-300">
       <div className="w-full px-6">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-novey-red p-2 rounded-lg text-white shadow-sm">
-                <ScanLine className="h-6 w-6" />
-            </div>
+            {logoSrc && !imgError ? (
+                 <img 
+                    src={logoSrc} 
+                    alt="Logo" 
+                    className="w-10 h-10 rounded-lg object-contain bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700" 
+                    onError={() => setImgError(true)}
+                 />
+            ) : (
+                <div className="bg-novey-red p-2 rounded-lg text-white shadow-sm">
+                    <ScanLine className="h-6 w-6" />
+                </div>
+            )}
             <div className="flex items-baseline gap-2">
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">ART INSPECTOR</h1>
                 <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50 uppercase tracking-wide">
