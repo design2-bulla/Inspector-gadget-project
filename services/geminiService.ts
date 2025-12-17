@@ -208,20 +208,22 @@ export const checkSpellingInImage = async (base64Image: string, mimeType: string
               }
             },
             {
-              text: `Act as a strict Spanish proofreader.
+              text: `Act as a conservative and skeptical Spanish proofreader for marketing materials.
+
+              TASK: Identify *undeniable* spelling errors in the VISIBLE text.
               
               CRITICAL ANTI-HALLUCINATION RULES:
-              1. ONLY analyze text that is CLEARLY VISIBLE.
-              2. If you see ANY mark above a vowel (pixel, dust, artistic design), assume it is an accent. DO NOT correct words that might have an accent in a weird font.
-              3. If uncertain, DO NOT report an error.
+              1. **OCR Verification**: You must SEE the text clearly. Do not infer words that "should" be there.
+              2. **Ambiguity Tolerance**: If a word appears misspelled (e.g., "resistent" instead of "resistente") but the text might be cut off, or the font is low contrast, or the last letter is stylized, **IGNORE IT**. Assume it is correct.
+              3. **False Positives**: It is much worse to flag a correct word as an error than to miss an error.
+              4. **Ignore**:
+                 - Words with foreign roots used in marketing (e.g., "Smart", "EasyClean", "Inverter").
+                 - Words that are partially obscured or at the edge of the image.
+                 - Proper nouns or brand names.
               
-              Identify REAL spelling errors:
-              1. Missing accents/tildes (CRITICAL).
-              2. Typos.
-
-              Ignore:
-              - SKUs, Prices, Brands.
-              - English terms (OFF, Sale, Smart TV).
+              ONLY report an error if:
+              - The word is fully visible, high contrast, and clearly spelled wrong (e.g., "Ofrta", "Cancion" without accent, "Mas" without accent meaning 'more').
+              - You are 100% certain it is not an OCR mistake.
 
               Return a JSON object.`
             }
