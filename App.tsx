@@ -543,9 +543,16 @@ const App: React.FC = () => {
                                         <div className="flex justify-center mb-4">
                                             <img src={item.fileBase64} className="h-32 object-contain rounded opacity-50 grayscale" alt="Thumb" />
                                         </div>
-                                        <p className="text-red-600 dark:text-red-400 font-medium">
+                                        <p className="text-red-600 dark:text-red-400 font-medium mb-4">
                                             {item.errorMsg || "Error desconocido"}
                                         </p>
+                                        <button 
+                                            onClick={() => processSpecificItem(item.id)}
+                                            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Reintentar Análisis
+                                        </button>
                                     </div>
                                 ) : (
                                     // Loading / Pending State
