@@ -43,13 +43,17 @@ async function runWithRetry<T>(operation: () => Promise<T>, retries = 3, context
         } catch (error: any) {
             lastError = error;
             // Check for Rate Limit (429) or Service Unavailable (503)
-            const isRateLimit = error.message?.includes('429') || error.status === 429 || error.message?.includes('Too Many Requests');
-            const isOverloaded = error.message?.includes('503') || error.status === 503;
+            const errorMsg = error.message?.toLowerCase() || "";
+            const isRateLimit = errorMsg.includes('429') || error.status === 429 || errorMsg.includes('too many requests');
+            const isOverloaded = errorMsg.includes('503') || error.status === 503 || errorMsg.includes('overloaded');
             
             if (isRateLimit || isOverloaded) {
-                console.warn(`${context} hit rate limit. Retrying in ${(i + 1) * 2}s...`);
-                // Exponential backoff: 2s, 4s, 6s...
-                await delay(2000 * (i + 1));
+                // If Overloaded (503), wait longer (4s base) than simple Rate Limit (2s base)
+                const baseWait = isOverloaded ? 4000 : 2000;
+                const waitTime = baseWait * (i + 1);
+                
+                console.warn(`${context} hit limit/overload. Retrying in ${waitTime}ms...`);
+                await delay(waitTime);
             } else {
                 // If it's a different error (e.g. Bad Request), maybe don't retry immediately or retry shorter
                 console.warn(`${context} failed. Retrying... (${i + 1}/${retries})`);

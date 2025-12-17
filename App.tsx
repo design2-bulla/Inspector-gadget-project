@@ -175,11 +175,29 @@ const App: React.FC = () => {
           console.error(`Error processing item ${item.id}`, error);
           let msg = "Error al procesar imagen.";
           
-          if (error.message === 'API_KEY_MISSING') msg = 'Falta API Key';
-          else if (error.message?.includes('429') || error.message?.includes('Quota') || error.status === 429) {
-              msg = 'Límite de velocidad (429). Intentando continuar...';
+          // Get error string safely
+          const errorStr = (error.message || JSON.stringify(error)).toLowerCase();
+
+          if (errorStr.includes('api_key_missing')) {
+             msg = 'Falta API Key';
+          } 
+          else if (errorStr.includes('429') || errorStr.includes('quota') || errorStr.includes('too many requests')) {
+              msg = 'Tráfico alto en Google (429). Intenta en 1 min.';
           }
-          else if (error.message) msg = error.message.slice(0, 50);
+          else if (errorStr.includes('503') || errorStr.includes('overloaded')) {
+              msg = 'Servidores de Google saturados (503). Intenta más tarde.';
+          }
+          else if (errorStr.includes('safety') || errorStr.includes('blocked')) {
+              msg = 'Imagen bloqueada por filtros de seguridad.';
+          }
+          else {
+              // Fallback: If it looks like raw JSON, show generic error
+              if (errorStr.includes('{') && errorStr.includes('}')) {
+                   msg = "Error de conexión con IA.";
+              } else {
+                   msg = errorStr.slice(0, 50);
+              }
+          }
 
           setQueue(prev => prev.map(i => i.id === item.id ? { 
               ...i, 
